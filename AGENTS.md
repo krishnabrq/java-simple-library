@@ -77,8 +77,14 @@ The controller maps DTO ↔ entity via `BookMapper` at the API boundary. The ser
 
 ## Running
 
+There's a `Makefile` wrapping the common Gradle calls. `make` with no args prints the available targets. Common ones:
+
 ```bash
-./gradlew bootRun
+make run      # ./gradlew bootRun
+make build    # ./gradlew build
+make test     # ./gradlew test
+make watch    # ./gradlew compileJava --continuous (for hot reload via devtools)
+make clean    # ./gradlew clean
 ```
 
 - App: `http://localhost:8080/api/v1/books`

@@ -35,6 +35,8 @@ _Nothing — pick the next concept._
 - [x] **`BookDto.Response`** record — API shape decoupled from the entity. Controller now returns `BookDto.Response`/`List<BookDto.Response>`.
 - [x] **MapStruct (`BookMapper`)** — compile-time entity ↔ DTO mapping. Five methods: `toResponse`, `toResponses`, `toEntity` (POST), `updateFromWriteRequest` (PUT), `updatePatch` (PATCH with `NullValuePropertyMappingStrategy.IGNORE`). Generated `BookMapperImpl` is plain getter→setter code, no reflection.
 - [x] **`AGENTS.md`** — canonical, tool-neutral project handoff doc. `CLAUDE.md` shrunk to a thin bootstrap that points at `AGENTS.md` (anti-drift: project info lives in one file only).
+- [x] **Entity-level constraints + explicit table name.** `BookEntity` now has `@Table(name = "books")`, `@NotBlank @Size(1, 1000)` + `@Column(nullable = false, length = 1000)` on title, `@Min(0) @Max(100_000)` + `@Column(nullable = false)` on count. DTO bounds updated to match (1000 / 100_000). DDL emits `NOT NULL`, `VARCHAR(1000)`, and a `CHECK` constraint on `count`.
+- [x] **`Makefile`** — self-documenting shortcuts for the common Gradle calls (`make run`, `make build`, `make test`, `make watch`, `make clean`, `make compile`, `make deps`). `make` with no args lists targets via comments.
 
 ## Next up (suggested path)
 
