@@ -19,8 +19,9 @@
 - SLF4J logging. `BookService`: writes INFO, reads DEBUG. `GlobalExceptionHandler` 4xx: DEBUG. Configurable via `logging.level.<pkg>=<level>`. Structured JSON (Spring Boot 3.4+ built-in) via `logging.structured.format.console={ecs|gelf|logstash}` (off by default).
 - Spotless (`com.diffplug.spotless` 8.4.0) + google-java-format. Also: `removeUnusedImports`, `importOrder`, `forbidWildcardImports`, `forbidModuleImports`, `cleanthat`. `make format` to apply, `make format-check` to verify.
 
+- First test: `@SpringBootTest` (end-to-end API tests) and `@ExtendWith(MockitoExtension.class)` (unit tests) added. Test coverage via `jacoco`.
+
 ## Next
 
-- First test: `@WebMvcTest` (controller), `@DataJpaTest` (repo), or `@SpringBootTest` (end-to-end).
 - Pagination + sorting on list (`Pageable`).
 - Flyway migrations; switch `spring.jpa.hibernate.ddl-auto` off `create-drop`.

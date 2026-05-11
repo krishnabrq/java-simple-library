@@ -211,3 +211,11 @@ Project workflow:
 - `AGENTS.md` is canonical; `CLAUDE.md` is a thin pointer. Project info lives in one file — anti-drift.
 - Tracking files: AGENTS (canonical), CLAUDE (pointer), PROGRESS (tasks), JOURNEY (history). Update after meaningful milestones.
 - Group by data, separate by behavior: DTOs grouped in `BookDto`; exceptions stay one-per-file.
+
+## Testing
+
+- **Integration Tests**: `@SpringBootTest` + `@AutoConfigureMockMvc` tests the entire application stack.
+- `MockMvc`: used to perform simulated HTTP requests (`get`, `post`, etc.) and verify responses without starting a real HTTP server.
+- **Unit Tests**: `@ExtendWith(MockitoExtension.class)` for fast service-layer tests isolated from the Spring context.
+- `ObjectMapper`: injected to serialize/deserialize DTOs to/from JSON in test payloads.
+- **Test Coverage**: Configured via `jacoco` plugin. Running `make test` executes tests and generates `html` and `xml` coverage reports under `build/reports/jacoco/test/`.
