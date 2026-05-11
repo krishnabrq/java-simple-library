@@ -21,58 +21,47 @@ import jakarta.validation.constraints.Min;
 @RequestMapping("/api/v1/books")
 public class BookController {
 
-  private final BookRepository repository;
+  private final BookService service;
+  private final BookMapper mapper;
 
-  public BookController(BookRepository repository) {
-    this.repository = repository;
+  public BookController(BookService service, BookMapper mapper) {
+    this.service = service;
+    this.mapper = mapper;
   }
 
   @GetMapping
-  public List<BookEntity> list() {
-    return repository.findAll();
+  public List<BookDto.Response> list() {
+    return mapper.toResponses(service.findAll());
   }
 
   @GetMapping("/{bookId}")
-  public BookEntity get(@PathVariable @Min(1) Long bookId) {
-    return repository.findById(bookId)
-        .orElseThrow(() -> new BookNotFoundException(bookId));
+  public BookDto.Response get(@PathVariable @Min(1) Long bookId) {
+    return mapper.toResponse(service.findById(bookId));
   }
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  public BookEntity create(@Valid @RequestBody BookDto.WriteRequest request) {
-    BookEntity book = new BookEntity(request.title(), request.count());
-    return repository.save(book);
+  public BookDto.Response create(@Valid @RequestBody BookDto.WriteRequest request) {
+    return mapper.toResponse(service.create(request));
   }
 
   @PutMapping("/{bookId}")
-  public BookEntity replace(@PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.WriteRequest request) {
-    BookEntity existing = repository.findById(bookId)
-        .orElseThrow(() -> new BookNotFoundException(bookId));
-    existing.setTitle(request.title());
-    existing.setCount(request.count());
-    return repository.save(existing);
+  public BookDto.Response replace(
+      @PathVariable @Min(1) Long bookId,
+      @Valid @RequestBody BookDto.WriteRequest request) {
+    return mapper.toResponse(service.replace(bookId, request));
   }
 
   @PatchMapping("/{bookId}")
-  public BookEntity patch(@PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.PatchRequest patch) {
-    BookEntity existing = repository.findById(bookId)
-        .orElseThrow(() -> new BookNotFoundException(bookId));
-    if (patch.title() != null) {
-      existing.setTitle(patch.title());
-    }
-    if (patch.count() != null) {
-      existing.setCount(patch.count());
-    }
-    return repository.save(existing);
+  public BookDto.Response patch(
+      @PathVariable @Min(1) Long bookId,
+      @Valid @RequestBody BookDto.PatchRequest patch) {
+    return mapper.toResponse(service.patch(bookId, patch));
   }
 
   @DeleteMapping("/{bookId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable @Min(1) Long bookId) {
-    if (!repository.existsById(bookId)) {
-      throw new BookNotFoundException(bookId);
-    }
-    repository.deleteById(bookId);
+    service.delete(bookId);
   }
 }

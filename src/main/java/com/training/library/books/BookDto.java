@@ -17,4 +17,8 @@ public interface BookDto {
   record PatchRequest(
       @Size(min = 1, max = 200) String title,
       @PositiveOrZero @Max(10_000) Integer count) {}
+
+  // Outbound response shape. Decoupled from BookEntity so the API stays stable
+  // even as the entity gains internal columns.
+  record Response(Long id, String title, int count) {}
 }
