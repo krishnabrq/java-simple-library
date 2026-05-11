@@ -1,23 +1,36 @@
 package com.training.library.books;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-@Entity(name = "books")
+@Entity
+@Table(name = "books")
 class BookEntity {
+
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  @NotBlank
+  @Size(min = 1, max = 1000)
+  @Column(nullable = false, length = 1000)
   private String title;
+
+  @Min(0)
+  @Max(100_000)
+  @Column(nullable = false)
   private int count;
 
-  // No-arg constructor: required by JPA (and used by Jackson when deserializing
-  // JSON).
-  public BookEntity() {
-  }
+  // No-arg constructor: required by JPA (and used by Jackson when deserializing JSON).
+  public BookEntity() {}
 
   public BookEntity(String title, int count) {
     this.title = title;
