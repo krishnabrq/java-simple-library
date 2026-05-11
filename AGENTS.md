@@ -37,8 +37,8 @@ com.training.library/
 │   ├── BookMapper.java              # MapStruct
 │   └── BookNotFoundException.java
 └── common/                          # cross-cutting
-    ├── GlobalExceptionHandler.java  # @RestControllerAdvice
-    └── ErrorResponse.java
+	├── GlobalExceptionHandler.java  # @RestControllerAdvice
+	└── ErrorResponse.java
 ```
 
 ## Layering (per feature)
@@ -66,6 +66,7 @@ Mapper converts DTO ↔ entity at controller boundary. Service returns entity; c
 - Records can't be JPA entities (no no-arg ctor, immutable). Entities are regular classes; omit `setId`.
 - `@Transactional(readOnly = true)` at service class; method-level `@Transactional` on writes.
 - Constructor injection only. No `@Autowired` on fields.
+- Formatting: Spotless + google-java-format. `make format` to apply, `make format-check` to verify. Also strips unused imports, normalises import order, forbids wildcard/module imports, runs CleanThat refactors.
 
 ## Logging
 
@@ -90,6 +91,8 @@ Makefile wraps Gradle.
 | `make watch`         | `./gradlew compileJava --continuous` (pairs with `make run`) |
 | `make clean`         | `./gradlew clean`                                            |
 | `make deps`          | `./gradlew dependencies --configuration runtimeClasspath`    |
+| `make format`        | `./gradlew spotlessApply` (auto-format Java sources)         |
+| `make format-check`  | `./gradlew spotlessCheck` (verify formatting, fails on diff) |
 
 - App: http://localhost:8080/api/v1/books
 - H2 console: http://localhost:8080/h2-console (JDBC `jdbc:h2:mem:library`, user `sa`, blank password)

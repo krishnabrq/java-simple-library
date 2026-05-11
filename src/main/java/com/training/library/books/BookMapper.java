@@ -1,7 +1,6 @@
 package com.training.library.books;
 
 import java.util.List;
-
 import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

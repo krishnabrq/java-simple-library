@@ -15,12 +15,12 @@
 - `BookMapper` (MapStruct, `componentModel = "spring"`): `toResponse`, `toResponses`, `toEntity` (`@Mapping(target="id", ignore=true)`), `updateFromWriteRequest` (PUT), `updatePatch` (PATCH; `@BeanMapping(nullValuePropertyMappingStrategy = IGNORE)`).
 - `AGENTS.md` canonical; `CLAUDE.md` shrunk to pointer.
 - `BookEntity` entity-level constraints: `@Table(name="books")`. Title `@NotBlank @Size(1,1000)` + `@Column(nullable=false, length=1000)`. Count `@Min(0) @Max(100_000)` + `@Column(nullable=false)`. DDL emits `NOT NULL`, `VARCHAR(1000)`, `CHECK` on count.
-- `Makefile`: `help`, `build`, `run`, `test`, `clean`, `compile`, `watch`, `deps`. Self-documenting via `## ` comments.
+- `Makefile`: `help`, `build`, `run`, `test`, `clean`, `compile`, `watch`, `deps`, `format`, `format-check`. Self-documenting via `## ` comments.
 - SLF4J logging. `BookService`: writes INFO, reads DEBUG. `GlobalExceptionHandler` 4xx: DEBUG. Configurable via `logging.level.<pkg>=<level>`. Structured JSON (Spring Boot 3.4+ built-in) via `logging.structured.format.console={ecs|gelf|logstash}` (off by default).
+- Spotless (`com.diffplug.spotless` 8.4.0) + google-java-format. Also: `removeUnusedImports`, `importOrder`, `forbidWildcardImports`, `forbidModuleImports`, `cleanthat`. `make format` to apply, `make format-check` to verify.
 
 ## Next
 
-- Spotless + google-java-format (build.gradle).
 - First test: `@WebMvcTest` (controller), `@DataJpaTest` (repo), or `@SpringBootTest` (end-to-end).
 - Pagination + sorting on list (`Pageable`).
 - Flyway migrations; switch `spring.jpa.hibernate.ddl-auto` off `create-drop`.

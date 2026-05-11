@@ -1,7 +1,7 @@
 package com.training.library.common;
 
+import com.training.library.books.BookNotFoundException;
 import java.util.List;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -13,8 +13,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-
-import com.training.library.books.BookNotFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -38,9 +36,10 @@ public class GlobalExceptionHandler {
   // 400 — request body failed Bean Validation (@NotBlank, @Size, @Max, etc.)
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<ErrorResponse> handleBodyValidation(MethodArgumentNotValidException ex) {
-    List<ErrorResponse.FieldError> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
-        .map(fe -> new ErrorResponse.FieldError(fe.getField(), fe.getDefaultMessage()))
-        .toList();
+    List<ErrorResponse.FieldError> fieldErrors =
+        ex.getBindingResult().getFieldErrors().stream()
+            .map(fe -> new ErrorResponse.FieldError(fe.getField(), fe.getDefaultMessage()))
+            .toList();
     log.debug("400 body validation failed: {} field error(s)", fieldErrors.size());
     return badRequest("Validation failed", fieldErrors);
   }
@@ -48,13 +47,19 @@ public class GlobalExceptionHandler {
   // 400 — method parameter (e.g. @PathVariable, @RequestParam) failed
   // Bean Validation constraints like @Min, @Pattern, etc.
   @ExceptionHandler(HandlerMethodValidationException.class)
-  public ResponseEntity<ErrorResponse> handleParameterValidation(HandlerMethodValidationException ex) {
-    List<ErrorResponse.FieldError> fieldErrors = ex.getParameterValidationResults().stream()
-        .flatMap(result -> result.getResolvableErrors().stream()
-            .map(err -> new ErrorResponse.FieldError(
-                result.getMethodParameter().getParameterName(),
-                err.getDefaultMessage())))
-        .toList();
+  public ResponseEntity<ErrorResponse> handleParameterValidation(
+      HandlerMethodValidationException ex) {
+    List<ErrorResponse.FieldError> fieldErrors =
+        ex.getParameterValidationResults().stream()
+            .flatMap(
+                result ->
+                    result.getResolvableErrors().stream()
+                        .map(
+                            err ->
+                                new ErrorResponse.FieldError(
+                                    result.getMethodParameter().getParameterName(),
+                                    err.getDefaultMessage())))
+            .toList();
     log.debug("400 parameter validation failed: {} field error(s)", fieldErrors.size());
     return badRequest("Validation failed", fieldErrors);
   }
@@ -63,9 +68,8 @@ public class GlobalExceptionHandler {
   // (e.g. "hhjg" for a Long path variable)
   @ExceptionHandler(MethodArgumentTypeMismatchException.class)
   public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
-    String expectedType = ex.getRequiredType() != null
-        ? ex.getRequiredType().getSimpleName()
-        : "unknown";
+    String expectedType =
+        ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown";
     String message = "Parameter '" + ex.getName() + "' must be of type " + expectedType;
     log.debug("400 type mismatch on '{}': expected {}", ex.getName(), expectedType);
     return badRequest(message, null);
@@ -83,10 +87,12 @@ public class GlobalExceptionHandler {
         .body(ErrorResponse.of(404, "NotFound", message));
   }
 
-  private ResponseEntity<ErrorResponse> badRequest(String message, List<ErrorResponse.FieldError> errors) {
-    ErrorResponse body = errors == null
-        ? ErrorResponse.of(400, "BadRequest", message)
-        : ErrorResponse.of(400, "BadRequest", message, errors);
+  private ResponseEntity<ErrorResponse> badRequest(
+      String message, List<ErrorResponse.FieldError> errors) {
+    ErrorResponse body =
+        errors == null
+            ? ErrorResponse.of(400, "BadRequest", message)
+            : ErrorResponse.of(400, "BadRequest", message, errors);
     return ResponseEntity.badRequest().body(body);
   }
 }

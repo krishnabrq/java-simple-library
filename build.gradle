@@ -2,6 +2,18 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.0.6'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'com.diffplug.spotless' version "8.4.0"
+}
+
+spotless {
+	java {
+		importOrder()
+		removeUnusedImports()
+		forbidWildcardImports()
+		forbidModuleImports()
+		cleanthat()
+		googleJavaFormat()
+	}
 }
 
 group = 'com.training'
@@ -14,6 +26,7 @@ java {
 }
 
 repositories {
+	gradlePluginPortal()
 	mavenCentral()
 }
 

@@ -1,10 +1,10 @@
-.PHONY: help build run test clean compile watch deps
+.PHONY: help build run test clean compile watch deps format format-check
 
 .DEFAULT_GOAL := help
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 build: ## Compile, run tests, assemble jar
 	./gradlew build
@@ -26,3 +26,9 @@ watch: ## Auto-recompile on file changes (pairs with `make run` in another termi
 
 deps: ## Print runtime dependency tree
 	./gradlew dependencies --configuration runtimeClasspath
+
+format: ## Auto-format Java sources (Spotless + google-java-format)
+	./gradlew spotlessApply
+
+format-check: ## Verify formatting without modifying files (CI-style)
+	./gradlew spotlessCheck
