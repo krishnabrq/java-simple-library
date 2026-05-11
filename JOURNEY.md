@@ -220,4 +220,62 @@ If true DB-level enforcement of arbitrary rules is ever needed (e.g. cross-colum
 
 ---
 
+### SLF4J logging — configurable level + optional JSON
+
+**What SLF4J is.** A **facade**: a logging API (`org.slf4j.Logger`, `LoggerFactory`) that delegates to whatever backend is on the classpath. Spring Boot bundles **Logback** as the default backend. Code talks to SLF4J; ops swap backends without touching code. This is why every Java tutorial uses SLF4J even though Logback does the real work.
+
+**The pattern in every class that logs:**
+
+```java
+private static final Logger log = LoggerFactory.getLogger(BookService.class);
+```
+
+`static final` — one logger per class, created at class-load time, named after the class so per-package log levels work.
+
+**Levels, from chattiest to quietest:** `TRACE < DEBUG < INFO < WARN < ERROR`. Setting a level means "emit this **and everything more severe**." `INFO` is the usual default.
+
+**Where I logged what, and why:**
+
+| Place                                              | Level   | Rationale                                                                                   |
+| -------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `BookService` writes (create/replace/patch/delete) | `INFO`  | State changes — worth a permanent record.                                                   |
+| `BookService` reads (findAll/findById)             | `DEBUG` | Can be very frequent; off by default, flip to `DEBUG` when troubleshooting.                 |
+| `GlobalExceptionHandler` 4xx handlers              | `DEBUG` | Client errors aren't _our_ bug. Logging them at `INFO+` pollutes the log with normal noise. |
+| (Hypothetical 5xx)                                 | `ERROR` | _Our_ bug. Always log with the throwable so the stack trace is captured.                    |
+
+**Parameterized messages — the `{}` placeholder:**
+
+```java
+log.info("created book id={} title='{}'", saved.getId(), saved.getTitle());
+```
+
+Lazy formatting. If the level is disabled, SLF4J never builds the string. Don't ever do `log.info("created book id=" + id)` — that concatenates eagerly even when nobody's listening.
+
+**Making it configurable in `application.properties`:**
+
+```properties
+logging.level.root=INFO
+logging.level.com.training.library=INFO
+# logging.level.org.hibernate.SQL=DEBUG
+```
+
+`logging.level.<package>=<level>` works per-package because each logger is named after the class' fully qualified name — Spring matches the longest-prefix package. Override at run time:
+
+- CLI: `./gradlew bootRun --args='--logging.level.com.training.library=DEBUG'`
+- Env: `LOGGING_LEVEL_COM_TRAINING_LIBRARY=DEBUG ./gradlew bootRun`
+
+**Structured logs (optional JSON output)** — Spring Boot 3.4+ added this built-in. One property:
+
+```properties
+# logging.structured.format.console=ecs
+```
+
+Built-in formats: `ecs` (Elastic Common Schema), `gelf` (Graylog), `logstash`. Unset = the normal human-readable Logback pattern. JSON output is what log aggregators (Elasticsearch/Kibana, Loki, Datadog, etc.) ingest cleanly — each line becomes a structured record with `timestamp`, `level`, `logger`, `message`, plus any **MDC** context. Locally you want it off; in a real deployment you want it on.
+
+**MDC = Mapped Diagnostic Context.** A thread-local map of key/value pairs. Things like `requestId`, `userId` get put into MDC at the start of a request and every log line on that thread automatically carries them. The structured formatters emit MDC entries as top-level JSON fields, making them queryable in the aggregator. We're not using MDC yet — flag for later when we add a request-ID filter.
+
+**Gotcha to remember.** Don't use `log.info("..." + expensiveCall())`. Even if `INFO` is enabled, you've coupled formatting to evaluation. Either use placeholders (`log.info("...{}", expensiveCall())`) or guard with `if (log.isInfoEnabled())`. Placeholders cover the 99% case; the explicit guard is only for genuinely costly computations.
+
+---
+
 _Future sessions will add new dated entries below._

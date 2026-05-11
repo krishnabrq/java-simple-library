@@ -2,6 +2,8 @@ package com.training.library.common;
 
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -17,15 +19,19 @@ import com.training.library.books.BookNotFoundException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+  private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
   // 404 — domain "book not found"
   @ExceptionHandler(BookNotFoundException.class)
   public ResponseEntity<ErrorResponse> handleBookNotFound(BookNotFoundException ex) {
+    log.debug("404 book not found: {}", ex.getMessage());
     return notFound(ex.getMessage());
   }
 
   // 404 — route not found (catches unmatched URLs, replaces Whitelabel page)
   @ExceptionHandler(NoResourceFoundException.class)
   public ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException ex) {
+    log.debug("404 no route: /{}", ex.getResourcePath());
     return notFound("No endpoint at /" + ex.getResourcePath());
   }
 
@@ -35,6 +41,7 @@ public class GlobalExceptionHandler {
     List<ErrorResponse.FieldError> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
         .map(fe -> new ErrorResponse.FieldError(fe.getField(), fe.getDefaultMessage()))
         .toList();
+    log.debug("400 body validation failed: {} field error(s)", fieldErrors.size());
     return badRequest("Validation failed", fieldErrors);
   }
 
@@ -48,6 +55,7 @@ public class GlobalExceptionHandler {
                 result.getMethodParameter().getParameterName(),
                 err.getDefaultMessage())))
         .toList();
+    log.debug("400 parameter validation failed: {} field error(s)", fieldErrors.size());
     return badRequest("Validation failed", fieldErrors);
   }
 
@@ -59,12 +67,14 @@ public class GlobalExceptionHandler {
         ? ex.getRequiredType().getSimpleName()
         : "unknown";
     String message = "Parameter '" + ex.getName() + "' must be of type " + expectedType;
+    log.debug("400 type mismatch on '{}': expected {}", ex.getName(), expectedType);
     return badRequest(message, null);
   }
 
   // 400 — request body wasn't valid JSON (malformed, wrong content-type, etc.)
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex) {
+    log.debug("400 unreadable request body");
     return badRequest("Malformed JSON request", null);
   }
 

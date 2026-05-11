@@ -37,6 +37,7 @@ _Nothing — pick the next concept._
 - [x] **`AGENTS.md`** — canonical, tool-neutral project handoff doc. `CLAUDE.md` shrunk to a thin bootstrap that points at `AGENTS.md` (anti-drift: project info lives in one file only).
 - [x] **Entity-level constraints + explicit table name.** `BookEntity` now has `@Table(name = "books")`, `@NotBlank @Size(1, 1000)` + `@Column(nullable = false, length = 1000)` on title, `@Min(0) @Max(100_000)` + `@Column(nullable = false)` on count. DTO bounds updated to match (1000 / 100_000). DDL emits `NOT NULL`, `VARCHAR(1000)`, and a `CHECK` constraint on `count`.
 - [x] **`Makefile`** — self-documenting shortcuts for the common Gradle calls (`make run`, `make build`, `make test`, `make watch`, `make clean`, `make compile`, `make deps`). `make` with no args lists targets via comments.
+- [x] **SLF4J logging** — `BookService` logs writes at `INFO`, reads at `DEBUG`. `GlobalExceptionHandler` logs 4xx outcomes at `DEBUG` (client errors, not noise-worthy). Levels are configurable per-package via `logging.level.*`. Structured JSON output (`ecs`/`gelf`/`logstash`) is wired and toggleable via `logging.structured.format.console` — off by default, one line to flip on for log aggregators.
 
 ## Next up (suggested path)
 
