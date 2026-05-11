@@ -14,7 +14,7 @@ This is **not** a production application. Pedagogy beats production patterns her
 
 ## Agent role / collaboration style
 
-- **Teach, don't just do.** When introducing a new Spring concept (annotation, pattern, dependency), explain what it does and *why* it exists. Relate to plain Java when helpful.
+- **Teach, don't just do.** When introducing a new Spring concept (annotation, pattern, dependency), explain what it does and _why_ it exists. Relate to plain Java when helpful.
 - **Small steps.** One concept at a time. Don't pull in profiles, security, AOP, caching, observability, etc. until there's a real reason.
 - **Watch the basics.** The user may miss compile-level issues (missing return, wrong import, primitive vs. wrapper). Point them out plainly.
 - **Confirm before refactors.** Don't restructure files or add abstractions unprompted.
@@ -54,17 +54,17 @@ com.training.library/
 
 `Controller → Service → Repository`. Strict boundaries:
 
-| Layer | Lives here | Does NOT live here |
-|---|---|---|
+| Layer      | Lives here                                                              | Does NOT live here                             |
+| ---------- | ----------------------------------------------------------------------- | ---------------------------------------------- |
 | Controller | `@RequestBody`, `@PathVariable`, `@Valid`, status codes, response shape | Repository calls, business logic, transactions |
-| Service | Business logic, transactions (`@Transactional`), orchestration | HTTP types, `ResponseEntity` |
-| Repository | Spring Data JPA queries | Anything non-persistence |
+| Service    | Business logic, transactions (`@Transactional`), orchestration          | HTTP types, `ResponseEntity`                   |
+| Repository | Spring Data JPA queries                                                 | Anything non-persistence                       |
 
 The controller maps DTO ↔ entity via `BookMapper` at the API boundary. The service returns the domain object (`BookEntity`); the controller converts to `BookDto.Response`.
 
 ## Conventions
 
-- **Package by feature, not by layer.** Top-level packages name what the app *does* (`books/`, `authors/`, `loans/`), not framework concepts (`controller/`, `service/`). Layered structure is the *older* approach — don't migrate to it.
+- **Package by feature, not by layer.** Top-level packages name what the app _does_ (`books/`, `authors/`, `loans/`), not framework concepts (`controller/`, `service/`). Layered structure is the _older_ approach — don't migrate to it.
 - **DTOs are grouped** into a feature `XxxDto` interface with nested records (`BookDto.WriteRequest`, `BookDto.PatchRequest`, `BookDto.Response`). Group by data.
 - **Exceptions stay one-per-file** (e.g. `BookNotFoundException`) for type-based `@ExceptionHandler` dispatch and findability. Separate by behavior.
 - **Shared/cross-cutting code** goes in dedicated packages: `config/` (@Configuration classes — none yet), `storage/` (S3 wrapper — none yet), `messaging/` (queues — none yet), `common/` (`GlobalExceptionHandler`, `ErrorResponse`). Don't pre-create empty packages.
@@ -88,11 +88,11 @@ The controller maps DTO ↔ entity via `BookMapper` at the API boundary. The ser
 
 ## Tracking files (what lives where)
 
-| File | Purpose | Update cadence |
-|---|---|---|
-| `AGENTS.md` | This file. Canonical project state, conventions, agent role. | When stack/conventions/architecture change. |
-| `CLAUDE.md` | Thin bootstrap for Claude. Points to `AGENTS.md`. | Rarely. Don't put project info here. |
-| `PROGRESS.md` | Current task list — what's done, what's next. | After every meaningful task completion. |
-| `JOURNEY.md` | Narrative log of concepts learned, decisions made, gotchas. | After teaching a new concept or hitting a notable bug. |
+| File          | Purpose                                                      | Update cadence                                         |
+| ------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
+| `AGENTS.md`   | This file. Canonical project state, conventions, agent role. | When stack/conventions/architecture change.            |
+| `CLAUDE.md`   | Thin bootstrap for Claude. Points to `AGENTS.md`.            | Rarely. Don't put project info here.                   |
+| `PROGRESS.md` | Current task list — what's done, what's next.                | After every meaningful task completion.                |
+| `JOURNEY.md`  | Narrative log of concepts learned, decisions made, gotchas.  | After teaching a new concept or hitting a notable bug. |
 
 **Anti-drift discipline:** project info lives in `AGENTS.md` only. `CLAUDE.md` references it. If you find duplicated project content in `CLAUDE.md`, delete it.

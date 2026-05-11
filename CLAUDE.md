@@ -6,4 +6,4 @@ This file is intentionally thin. **Do not duplicate project info here** — anyt
 
 ## Claude-only notes
 
-(Nothing yet — add here only if it would *not* apply to a non-Claude agent.)
+(Nothing yet — add here only if it would _not_ apply to a non-Claude agent.)

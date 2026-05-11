@@ -9,21 +9,24 @@ A narrative log of what's been learned, decisions made, and mistakes worth remem
 **Where I'm starting from:** A few days of learning Java basics. First time touching Spring Boot.
 
 **What I did:**
+
 - Generated a Spring Boot 4.0.6 project on [start.spring.io](https://start.spring.io) with Gradle, Java 25, and these starters: Web MVC, Data JPA, H2, DevTools.
 - Created a `Book` record with `id`, `title`, `count`.
 - Stubbed out a `BookController` with a `@GetMapping("/books")` method.
 
 **What I learned (so far):**
+
 - A Spring Boot app entry point is a class annotated with `@SpringBootApplication` that calls `SpringApplication.run(...)`. The annotation is a meta-annotation bundling `@Configuration`, `@EnableAutoConfiguration`, and `@ComponentScan` — meaning: "this is a config class, auto-configure based on what's on the classpath, and scan this package (and below) for components."
 - `@RestController` = `@Controller` + `@ResponseBody`. Methods return data, not view names. Spring serializes the return value to JSON.
 - `@GetMapping("/books")` maps HTTP `GET /books` to the method.
 
 **Open question / mistake to fix next:**
+
 - `BookController.list()` declares it returns `Book[]` but the body is empty. That's a compile error — every non-void path must return a value. Next session: return something (start with a hard-coded list, then move toward a real data source).
 
 ### Mid-session: First working endpoint
 
-- Hit a second compile error: `new Book()` doesn't work because `Book` is a **record**. Records auto-generate a *canonical constructor* taking all components — there's no implicit no-arg constructor like in regular classes. Fixed by calling `new Book(1L, "...", 3)`.
+- Hit a second compile error: `new Book()` doesn't work because `Book` is a **record**. Records auto-generate a _canonical constructor_ taking all components — there's no implicit no-arg constructor like in regular classes. Fixed by calling `new Book(1L, "...", 3)`.
 - Ran `./gradlew bootRun` — app starts, `GET /books` returns the JSON array. First Spring endpoint live.
 
 ### Next concept: API versioning
@@ -79,7 +82,7 @@ Built out the remaining HTTP verbs on `/api/v1/books`. Several concepts landed:
   - **PUT** = full replacement. Client sends the entire new representation; missing fields default. Implementation: load existing, overwrite all fields, save.
   - **PATCH** = partial update. Client sends only the fields they want to change; missing fields mean "don't touch". Implementation needs a DTO with **nullable wrapper types** (`Integer`, not `int`) so the controller can distinguish "absent" from "set to 0".
 - **`BookPatchRequest` record** — first proper DTO. Records are perfect here: immutable, no boilerplate. Records aren't usable as JPA entities (they need a no-arg constructor and mutability), but for request/response payloads they're ideal.
-- **Custom domain exceptions** — `BookNotFoundException extends RuntimeException` knows nothing about HTTP. It's a *domain signal*. The HTTP translation lives elsewhere — see below.
+- **Custom domain exceptions** — `BookNotFoundException extends RuntimeException` knows nothing about HTTP. It's a _domain signal_. The HTTP translation lives elsewhere — see below.
 - **`@RestControllerAdvice` + `@ExceptionHandler`** — created `common/GlobalExceptionHandler` (the first inhabitant of `common/`, which we'd predicted would house cross-cutting code). One `@ExceptionHandler(BookNotFoundException.class)` method turns the exception into a JSON 404. As more exception types appear, they all funnel through this one class — controllers stay clean.
 - **`@ResponseStatus`** — declarative way to set the HTTP status on a method (e.g. 204 for DELETE, 201 for POST). Simpler than `ResponseEntity` when the status is fixed.
 - **`@ResponseStatus(HttpStatus.NO_CONTENT)`** on a `void` DELETE method — REST convention: successful delete returns 204, no body.
@@ -100,7 +103,7 @@ Asked whether to consolidate book exceptions into one file and book DTOs into on
 Earlier deferred — now added. Two handlers in `GlobalExceptionHandler`:
 
 - `BookNotFoundException` — thrown by the controller for a missing book id.
-- `NoResourceFoundException` (`org.springframework.web.servlet.resource`) — Spring throws this when no route matches any request. Adding a handler for it replaces Spring's Whitelabel HTML page with consistent JSON 404s for *all* clients, not just those sending `Accept: application/json`.
+- `NoResourceFoundException` (`org.springframework.web.servlet.resource`) — Spring throws this when no route matches any request. Adding a handler for it replaces Spring's Whitelabel HTML page with consistent JSON 404s for _all_ clients, not just those sending `Accept: application/json`.
 
 Extracted a private `notFound(message)` helper at the same time. Two consumers of the same shape = the right moment to DRY it (any sooner would be premature).
 
@@ -108,7 +111,7 @@ Extracted a private `notFound(message)` helper at the same time. Two consumers o
 
 Took validation seriously. Two distinct validation scenarios, both end in HTTP 400 but use different mechanisms:
 
-1. **Path/query parameter conversion** (`/books/hhjg` where bookId is `Long`) — Spring fails the conversion *before* the controller runs and throws `MethodArgumentTypeMismatchException`. Caught in `GlobalExceptionHandler`.
+1. **Path/query parameter conversion** (`/books/hhjg` where bookId is `Long`) — Spring fails the conversion _before_ the controller runs and throws `MethodArgumentTypeMismatchException`. Caught in `GlobalExceptionHandler`.
 2. **Body content validation** (title length, count range, missing required fields) — done with **Bean Validation** annotations + `@Valid` on the `@RequestBody` parameter. Spring runs constraints before calling the method; on failure throws `MethodArgumentNotValidException`. Caught in `GlobalExceptionHandler` and converted to a 400 with a `errors[]` array of `{field, message}` entries.
 3. **(Bonus)** Malformed JSON throws `HttpMessageNotReadableException`. Also handled, also 400.
 
@@ -127,7 +130,7 @@ Took validation seriously. Two distinct validation scenarios, both end in HTTP 4
 
 ### Mid-session: Parameter-level validation + service layer
 
-**Parameter validation (path variables).** Spring 6.1+ auto-runs Bean Validation constraints on `@PathVariable`/`@RequestParam` — no `@Validated` on the class needed. The thrown type is `HandlerMethodValidationException` (distinct from `MethodArgumentNotValidException`, which is for `@RequestBody` validation). Added `@Min(1)` on every `bookId` to demo. **The real value of this lands later:** when `bookId` migrates to a Stripe-style string id (`book_abc123`), `@Pattern(regexp = ...)` is the *only* thing standing between malformed ids becoming 400s vs. quietly becoming 404s — because any string is a valid `String`, so the type-mismatch handler never fires.
+**Parameter validation (path variables).** Spring 6.1+ auto-runs Bean Validation constraints on `@PathVariable`/`@RequestParam` — no `@Validated` on the class needed. The thrown type is `HandlerMethodValidationException` (distinct from `MethodArgumentNotValidException`, which is for `@RequestBody` validation). Added `@Min(1)` on every `bookId` to demo. **The real value of this lands later:** when `bookId` migrates to a Stripe-style string id (`book_abc123`), `@Pattern(regexp = ...)` is the _only_ thing standing between malformed ids becoming 400s vs. quietly becoming 404s — because any string is a valid `String`, so the type-mismatch handler never fires.
 
 Caught an API surprise while wiring this up: the method is `getParameterValidationResults()` (not `getAllValidationResults()`). Worth remembering as a debugging hint: when Spring throws an exception type you haven't seen, `javap` on its class in the jar is fast and authoritative.
 
@@ -138,6 +141,7 @@ Caught an API surprise while wiring this up: the method is `getParameterValidati
 - **Repository**: persistence (Spring Data JPA).
 
 Key annotations:
+
 - **`@Service`** — Spring stereotype identical in behavior to `@Component`, semantically signals "business logic layer". Picked up by component scanning.
 - **`@Transactional`** — Spring AOP wraps the method in a DB transaction. On `RuntimeException` (e.g. `BookNotFoundException`), the transaction rolls back. Essential for read-modify-write flows so the whole sequence is atomic.
 - **`@Transactional(readOnly = true)` at class level** — defaults reads to read-only transactions (Hibernate skips dirty-checking → small perf + documents intent). Each write method overrides with method-level `@Transactional`. Idiomatic Spring pattern worth keeping.
@@ -148,7 +152,7 @@ Key annotations:
 
 **`BookDto.Response`** added. The controller now returns `BookDto.Response` (or `List<...>`), not `BookEntity`. The win: if `BookEntity` gains internal fields (e.g. `createdAt`, `internalNotes`), the JSON contract stays stable. **The entity stops being part of the public API.**
 
-**MapStruct (`BookMapper`).** Compile-time annotation processor that *generates* the mapping code. The interface declares the shapes; the build produces a `BookMapperImpl` class that's plain getter→setter Java — no reflection, debuggable, JIT-friendly. Key methods used:
+**MapStruct (`BookMapper`).** Compile-time annotation processor that _generates_ the mapping code. The interface declares the shapes; the build produces a `BookMapperImpl` class that's plain getter→setter Java — no reflection, debuggable, JIT-friendly. Key methods used:
 
 - `toResponse` / `toResponses` — entity → response shape (the list variant is auto-generated by delegating to the single-item method).
 - `toEntity(WriteRequest)` — POST. `@Mapping(target = "id", ignore = true)` so the DB owns id assignment.
@@ -156,6 +160,7 @@ Key annotations:
 - `updatePatch(@MappingTarget entity, PatchRequest)` — PATCH. The trick: `@BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)` makes nulls mean "leave the target field alone" — replaces the manual `if (patch.field() != null)` chain we had in the service.
 
 **Why MapStruct over ModelMapper / hand-written:**
+
 - Compile-time field-name checking: typos fail the build, not at 3am in prod.
 - Zero runtime reflection — the generated code is the code you'd write by hand.
 - `componentModel = "spring"` makes the generated impl a `@Component`; constructor injection works as usual.
@@ -168,16 +173,16 @@ Worth knowing also: MapStruct works fine with Java 25 / Spring Boot 4.0.6 even t
 
 Created `AGENTS.md` as the **canonical** project handoff doc (tool-neutral — any AI agent can read it and onboard). It contains: stack, architecture, conventions, agent role, tracking-file responsibilities.
 
-**Anti-drift design:** `CLAUDE.md` shrank to a *thin bootstrap* that says "read AGENTS.md" plus a placeholder for Claude-only notes. No project info in CLAUDE.md anymore. Single source of truth = no drift possible. Whenever conventions or stack change, only one file needs updating.
+**Anti-drift design:** `CLAUDE.md` shrank to a _thin bootstrap_ that says "read AGENTS.md" plus a placeholder for Claude-only notes. No project info in CLAUDE.md anymore. Single source of truth = no drift possible. Whenever conventions or stack change, only one file needs updating.
 
 The mental model going forward:
 
-| File | Role |
-|---|---|
-| `AGENTS.md` | Canonical project context. Stack, architecture, conventions, agent role. |
-| `CLAUDE.md` | Thin pointer to AGENTS.md + Claude-only quirks (currently empty). |
-| `PROGRESS.md` | Live task list. What's done, what's next. |
-| `JOURNEY.md` | Chronological learning log. Concepts, decisions, gotchas. |
+| File          | Role                                                                     |
+| ------------- | ------------------------------------------------------------------------ |
+| `AGENTS.md`   | Canonical project context. Stack, architecture, conventions, agent role. |
+| `CLAUDE.md`   | Thin pointer to AGENTS.md + Claude-only quirks (currently empty).        |
+| `PROGRESS.md` | Live task list. What's done, what's next.                                |
+| `JOURNEY.md`  | Chronological learning log. Concepts, decisions, gotchas.                |
 
 ---
 
