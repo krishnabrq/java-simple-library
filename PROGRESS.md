@@ -1,56 +1,26 @@
 # Progress
 
-A running checklist of what's built and what's next.
-
 ## Done
 
-- [x] Project scaffolded via [start.spring.io](https://start.spring.io) with Web MVC, JPA, H2, DevTools.
-- [x] `Book` record created (`id: long`, `title: String`, `count: int`).
-- [x] `BookController` with `@RestController` and `/books` GET mapping.
-- [x] `list()` returns a hard-coded `Book[]`; app runs and returns JSON.
+- Scaffolded via start.spring.io: web-mvc, data-jpa, h2, devtools, validation. Java 25, Gradle, Spring Boot 4.0.6.
+- API mounted at `/api/v1/books` (class-level `@RequestMapping`).
+- Package-by-feature; `common/` created only when first cross-cutting class arrived. `config/`, `storage/`, `messaging/` deferred.
+- JPA + H2 in-memory + console + SQL logging. `BookEntity` (class, not record — JPA needs no-arg ctor + mutability). No `setId`.
+- CRUD on `/api/v1/books`: GET list, GET by-id (404 via `BookNotFoundException`), POST (201), PUT (full replace), PATCH (partial via `PatchRequest` with nullable wrapper types), DELETE (204; 404 if missing).
+- `common/GlobalExceptionHandler` (`@RestControllerAdvice`). Handles: `BookNotFoundException` (404), `NoResourceFoundException` (404, replaces Whitelabel HTML), `MethodArgumentNotValidException` (400, body validation field errors), `HandlerMethodValidationException` (400, param-level validation), `MethodArgumentTypeMismatchException` (400, path/query conversion), `HttpMessageNotReadableException` (400, malformed JSON).
+- `spring-boot-starter-validation`. `WriteRequest` (POST/PUT): `@NotBlank @Size(1,1000)` title, `@NotNull @PositiveOrZero @Max(100_000)` count. `PatchRequest` (PATCH): null-tolerant only (`@Size`, `@PositiveOrZero`, `@Max`). `@Min(1)` on `bookId` path variables.
+- `common/ErrorResponse` record (preserves component order in JSON; vs `Map.of` unordered).
+- `BookService`: extracted from controller. Class-level `@Transactional(readOnly = true)`; method-level `@Transactional` on writes.
+- `BookDto.Response` record. Controller returns DTOs only; entity stays internal.
+- `BookMapper` (MapStruct, `componentModel = "spring"`): `toResponse`, `toResponses`, `toEntity` (`@Mapping(target="id", ignore=true)`), `updateFromWriteRequest` (PUT), `updatePatch` (PATCH; `@BeanMapping(nullValuePropertyMappingStrategy = IGNORE)`).
+- `AGENTS.md` canonical; `CLAUDE.md` shrunk to pointer.
+- `BookEntity` entity-level constraints: `@Table(name="books")`. Title `@NotBlank @Size(1,1000)` + `@Column(nullable=false, length=1000)`. Count `@Min(0) @Max(100_000)` + `@Column(nullable=false)`. DDL emits `NOT NULL`, `VARCHAR(1000)`, `CHECK` on count.
+- `Makefile`: `help`, `build`, `run`, `test`, `clean`, `compile`, `watch`, `deps`. Self-documenting via `## ` comments.
+- SLF4J logging. `BookService`: writes INFO, reads DEBUG. `GlobalExceptionHandler` 4xx: DEBUG. Configurable via `logging.level.<pkg>=<level>`. Structured JSON (Spring Boot 3.4+ built-in) via `logging.structured.format.console={ecs|gelf|logstash}` (off by default).
 
-## In progress
+## Next
 
-_Nothing — pick the next concept._
-
-## Done (continued)
-
-- [x] Versioned the API: `BookController` now mounted at `/api/v1/books` via class-level `@RequestMapping`.
-- [x] Discussed and settled on **package-by-feature** structure (deferred `common/`, `config/`, `storage/`, `messaging/` packages until needed).
-- [x] **Persistence with JPA + H2:** `BookEntity`, `BookRepository`, H2 in-memory + console + SQL logging.
-- [x] **Full CRUD:**
-  - `GET /api/v1/books` — list
-  - `GET /api/v1/books/{id}` — read one (404 via `BookNotFoundException`)
-  - `POST /api/v1/books` — create (201 Created)
-  - `PUT /api/v1/books/{id}` — full replace
-  - `PATCH /api/v1/books/{id}` — partial update via `BookPatchRequest` DTO with nullable fields
-  - `DELETE /api/v1/books/{id}` — delete (204 No Content; 404 if missing)
-- [x] **`common/GlobalExceptionHandler`** — first cross-cutting class in `common/`; turns `BookNotFoundException` into a JSON 404.
-- [x] **Global "no route" handler** — `NoResourceFoundException` mapped to JSON 404 (replaces Whitelabel HTML page).
-- [x] **Input validation:** added `spring-boot-starter-validation`. `BookDto.WriteRequest` (POST/PUT) uses `@NotBlank @Size`/`@NotNull @PositiveOrZero @Max`; `BookDto.PatchRequest` uses null-tolerant constraints only. POST/PUT no longer leak `BookEntity` as the request shape.
-- [x] **`common/ErrorResponse` record** — shared JSON error body shape; preserves field order (vs. unordered `Map.of`).
-- [x] **Three new exception handlers:** `MethodArgumentNotValidException` (body validation, field errors), `MethodArgumentTypeMismatchException` (path/query type conversion), `HttpMessageNotReadableException` (malformed JSON). All 400.
-- [x] **Parameter-level validation:** `@Min(1)` on `bookId` path variables; `HandlerMethodValidationException` handler for `@PathVariable`/`@RequestParam` constraint failures.
-- [x] **Service layer (`BookService`):** controller is now thin (HTTP only); business logic + repository calls + transaction boundaries moved into the service. Class-level `@Transactional(readOnly = true)` with method-level `@Transactional` on writes.
-- [x] **`BookDto.Response`** record — API shape decoupled from the entity. Controller now returns `BookDto.Response`/`List<BookDto.Response>`.
-- [x] **MapStruct (`BookMapper`)** — compile-time entity ↔ DTO mapping. Five methods: `toResponse`, `toResponses`, `toEntity` (POST), `updateFromWriteRequest` (PUT), `updatePatch` (PATCH with `NullValuePropertyMappingStrategy.IGNORE`). Generated `BookMapperImpl` is plain getter→setter code, no reflection.
-- [x] **`AGENTS.md`** — canonical, tool-neutral project handoff doc. `CLAUDE.md` shrunk to a thin bootstrap that points at `AGENTS.md` (anti-drift: project info lives in one file only).
-- [x] **Entity-level constraints + explicit table name.** `BookEntity` now has `@Table(name = "books")`, `@NotBlank @Size(1, 1000)` + `@Column(nullable = false, length = 1000)` on title, `@Min(0) @Max(100_000)` + `@Column(nullable = false)` on count. DTO bounds updated to match (1000 / 100_000). DDL emits `NOT NULL`, `VARCHAR(1000)`, and a `CHECK` constraint on `count`.
-- [x] **`Makefile`** — self-documenting shortcuts for the common Gradle calls (`make run`, `make build`, `make test`, `make watch`, `make clean`, `make compile`, `make deps`). `make` with no args lists targets via comments.
-- [x] **SLF4J logging** — `BookService` logs writes at `INFO`, reads at `DEBUG`. `GlobalExceptionHandler` logs 4xx outcomes at `DEBUG` (client errors, not noise-worthy). Levels are configurable per-package via `logging.level.*`. Structured JSON output (`ecs`/`gelf`/`logstash`) is wired and toggleable via `logging.structured.format.console` — off by default, one line to flip on for log aggregators.
-
-## Next up (suggested path)
-
-- [ ] Code formatter — Spotless + google-java-format in `build.gradle`.
-- [ ] First integration test (`@SpringBootTest` end-to-end, or `@DataJpaTest` for the repository, or `@WebMvcTest` for the controller).
-- [ ] Pagination + sorting on the list endpoint (`Pageable` parameter).
-- [ ] Consider migrations (Flyway) and switch `spring.jpa.hibernate.ddl-auto` away from `create-drop`.
-- [ ] First integration test with `@SpringBootTest` / `@DataJpaTest`.
-- [ ] Add pagination/sorting to the list endpoint (`Pageable` parameter).
-- [ ] Add `POST /books` to create a new book.
-- [ ] Wire JPA: turn `Book` into a `@Entity` and use a `JpaRepository`.
-- [ ] Enable H2 console and view the data.
-- [ ] Add validation (e.g. non-empty title, non-negative count).
-- [ ] Write a first integration test for the controller.
-
-_(Path is flexible — adjust based on what Krishna wants to learn next.)_
+- Spotless + google-java-format (build.gradle).
+- First test: `@WebMvcTest` (controller), `@DataJpaTest` (repo), or `@SpringBootTest` (end-to-end).
+- Pagination + sorting on list (`Pageable`).
+- Flyway migrations; switch `spring.jpa.hibernate.ddl-auto` off `create-drop`.

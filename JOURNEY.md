@@ -1,211 +1,169 @@
 # Journey
 
-A narrative log of what's been learned, decisions made, and mistakes worth remembering.
+Concept-keyed reference of what's been learned and decided. Not chronological. Each section is a dense fact block — consult on demand, no need to read linearly.
 
 ---
 
-## 2026-05-11 — Day 0: Setup
+## Spring Boot bootstrap
 
-**Where I'm starting from:** A few days of learning Java basics. First time touching Spring Boot.
+- `@SpringBootApplication` = `@Configuration` + `@EnableAutoConfiguration` + `@ComponentScan`.
+- Entry: a class with `@SpringBootApplication` calling `SpringApplication.run(...)`.
 
-**What I did:**
+## REST controllers
 
-- Generated a Spring Boot 4.0.6 project on [start.spring.io](https://start.spring.io) with Gradle, Java 25, and these starters: Web MVC, Data JPA, H2, DevTools.
-- Created a `Book` record with `id`, `title`, `count`.
-- Stubbed out a `BookController` with a `@GetMapping("/books")` method.
+- `@RestController` = `@Controller` + `@ResponseBody`. Method return → Jackson → JSON.
+- `@GetMapping("/x")` etc.; relative to class-level `@RequestMapping`.
+- `@PathVariable` name must match the path placeholder, or pass the name explicitly.
 
-**What I learned (so far):**
+## API versioning
 
-- A Spring Boot app entry point is a class annotated with `@SpringBootApplication` that calls `SpringApplication.run(...)`. The annotation is a meta-annotation bundling `@Configuration`, `@EnableAutoConfiguration`, and `@ComponentScan` — meaning: "this is a config class, auto-configure based on what's on the classpath, and scan this package (and below) for components."
-- `@RestController` = `@Controller` + `@ResponseBody`. Methods return data, not view names. Spring serializes the return value to JSON.
-- `@GetMapping("/books")` maps HTTP `GET /books` to the method.
+| Option                                                  | When                                  |
+| ------------------------------------------------------- | ------------------------------------- |
+| Class-level `@RequestMapping("/api/v1/books")` (chosen) | one or few controllers                |
+| `WebMvcConfigurer.configurePathMatch` + `addPathPrefix` | many controllers; single config point |
+| Header / query / subdomain                              | exist; URI versioning is standard     |
 
-**Open question / mistake to fix next:**
+## Content negotiation
 
-- `BookController.list()` declares it returns `Book[]` but the body is empty. That's a compile error — every non-void path must return a value. Next session: return something (start with a hard-coded list, then move toward a real data source).
+- Default Whitelabel Error Page is HTML for browsers (`Accept: text/html`). JSON clients (`Accept: application/json`) already get JSON.
+- To force JSON for all clients: handle the relevant exceptions in `@RestControllerAdvice`.
 
-### Mid-session: First working endpoint
+## Package structure
 
-- Hit a second compile error: `new Book()` doesn't work because `Book` is a **record**. Records auto-generate a _canonical constructor_ taking all components — there's no implicit no-arg constructor like in regular classes. Fixed by calling `new Book(1L, "...", 3)`.
-- Ran `./gradlew bootRun` — app starts, `GET /books` returns the JSON array. First Spring endpoint live.
+- Package-by-feature (`books/`, `authors/`, `loans/`) over package-by-layer.
+- Within a feature: use package-private to hide internals from other features.
+- Shared infra: `storage/` (S3), `messaging/` (queues), `config/` (`@Configuration` classes), `common/` (post-second-consumer).
+- Don't pre-create empty packages.
 
-### Next concept: API versioning
+## JPA + H2
 
-- Want endpoints under `/api/v1/books` so future breaking changes can live alongside the old API.
-- Three approaches discussed:
-  1. **Class-level `@RequestMapping("/api/v1/books")`** — cleanest start. Methods use bare `@GetMapping` and are relative to the class path.
-  2. **`WebMvcConfigurer.configurePathMatch` + `addPathPrefix`** — one config class adds `/api/v1` to every `@RestController`. Best when there are several controllers.
-  3. Header/query/subdomain versioning — exist, but URI versioning is the standard.
-- Picked Option 1 for now. Will revisit Option 2 when there's a second controller.
+- Annotations from `jakarta.persistence` (not `javax.persistence`).
+- `@Entity`, `@Id`, `@GeneratedValue(strategy = IDENTITY)`.
+- Entities can't be records: JPA needs no-arg ctor + mutability.
+- Omit `setId` on entities — prevents clients pre-assigning ids via `@RequestBody`.
+- `BookRepository extends JpaRepository<BookEntity, Long>` — implementation generated at runtime. Free: `findAll`, `save`, `findById`, `deleteById`, etc. Custom finders by method name (`findByTitleContainingIgnoreCase`).
+- DI: constructor injection (`final` fields, explicit deps, trivial to unit test). No `@Autowired` on fields.
+- `@RequestBody` → Jackson: no-arg ctor + setters. Absence of setter blocks the field.
 
-### Mid-session: 404s, content negotiation, and project structure
+### H2 config (application.properties)
 
-- Hitting old `/books` URL in the browser showed Spring Boot's **"Whitelabel Error Page"** — its default HTML for unhandled errors. Important realization: Spring uses **content negotiation** on the `Accept` header — browsers get HTML, API clients sending `Accept: application/json` already get JSON.
-- For consistent JSON errors regardless of client, the standard tool is `@RestControllerAdvice` + `@ExceptionHandler` (e.g. `NoResourceFoundException` for 404s). Skipped implementing it for now; noted for later.
-- Took stock of project structure ahead of adding DB, configs, S3, queues, utilities. Validated current shape and settled on principles:
-  - **Package by feature**, not by layer. `books/` holds controller + service + repository + entity together. Layered structure (`controller/`, `service/`, ...) is the older approach and not what to grow into.
-  - Use **package-private** within a feature to keep its internals invisible to other features — a real encapsulation boundary that the layered structure can't give you.
-  - **Shared infrastructure** (S3, queues) gets its own package (`storage/`, `messaging/`). Cross-cutting `@Configuration` classes go in `config/`. App-wide utilities go in `common/` — but only after a second consumer appears, to avoid the `util/` dumping ground.
-  - **Don't pre-create empty packages.** Add a folder only when there's a real file for it.
-  - Heads-up for later: JPA can't use Java `record`s as entities. When DB lands, `Book` becomes an `@Entity` class; a separate `BookResponse` record can keep the API shape decoupled from the DB shape.
+| Key                                            | Value                 | Effect                                                      |
+| ---------------------------------------------- | --------------------- | ----------------------------------------------------------- |
+| `spring.datasource.url`                        | `jdbc:h2:mem:library` | in-memory; data lives only while app runs                   |
+| `spring.jpa.hibernate.ddl-auto`                | `create-drop`         | schema generated from entities at boot; dropped on shutdown |
+| `spring.jpa.show-sql` + `hibernate.format_sql` | `true`                | log Hibernate's SQL                                         |
+| `spring.h2.console.enabled`                    | `true`                | console at `/h2-console`                                    |
 
-### Gotcha: trailing whitespace in `.properties` files
+H2 console: `jdbc:h2:mem:library`, user `sa`, blank password. For real apps later: `ddl-auto=none` + Flyway.
 
-While wiring up H2, hit a confusing error: `Cannot load driver class: org.h2.Driver`. The H2 jar was on the classpath — the real cause was trailing whitespace on the property value: `spring.datasource.driver-class-name=org.h2.Driver····` made Spring try to load `"org.h2.Driver    "` (with spaces) as a class.
+## HTTP verb semantics
 
-**Why this happens:** Java `.properties` files preserve trailing whitespace as part of the value. YAML/TOML strip it; `.properties` doesn't.
+| Verb   | Meaning                                 | Implementation                                                             |
+| ------ | --------------------------------------- | -------------------------------------------------------------------------- |
+| POST   | create                                  | 201 Created                                                                |
+| PUT    | full replace; missing fields default    | load → overwrite all → save                                                |
+| PATCH  | partial update; missing = "don't touch" | DTO uses wrapper types (`Integer`, not `int`) to distinguish absent from 0 |
+| DELETE | remove                                  | 204 No Content on success; 404 if missing                                  |
 
-**How to apply:** Enable "trim trailing whitespace on save" in your editor (e.g. `"files.trimTrailingWhitespace": true` in VS Code). When a Spring error says "cannot load class X" and X looks correct, suspect invisible characters in the config first.
+## DTOs
 
-### Mid-session: Persistence with JPA + H2
+- Group via interface namespace with nested records: `BookDto.WriteRequest`, `BookDto.PatchRequest`, `BookDto.Response`.
+- Interface members are implicitly `public static`.
+- Principle: **group by data, separate by behavior** (exceptions stay one-per-file for type-based dispatch).
 
-Adding write/read against an in-memory H2 database. Several new concepts at once:
+## Exception handling
 
-- **JPA entity basics** — `@Entity` marks a class as a DB-mapped table; `@Id` is the primary key; `@GeneratedValue(strategy = IDENTITY)` lets the DB auto-assign ids. Package is `jakarta.persistence` (post-Jakarta EE migration), not the older `javax.persistence`.
-- **Why `Book` had to stop being a record:** JPA reflectively constructs entities (needs a no-arg constructor) and sets fields after construction (needs mutability). Records are immutable and have no implicit no-arg ctor. Converted `Book` to a regular class with a public no-arg constructor, a convenience `(title, count)` constructor, getters, and setters — but **no `setId`**, so the API can't override the DB-assigned id.
-- **Spring Data JPA repositories:** `BookRepository extends JpaRepository<Book, Long>` is the entire file. Spring generates the implementation at runtime — get `findAll`, `save`, `findById`, `deleteById`, etc. for free. Custom finder methods can be added later by naming convention (e.g. `findByTitleContainingIgnoreCase`).
-- **Dependency injection — the core idea of Spring:** never write `new BookRepository(...)`. Spring sees `BookController`'s constructor takes a `BookRepository`, finds the matching bean, and passes it in. Used **constructor injection** (not `@Autowired` on fields) — supports `final` fields, makes unit testing trivial, dependencies are explicit. Old tutorials show field injection; ignore them.
-- **`@RequestBody`** — Spring (via Jackson) deserializes the JSON request body into a `Book`. Calls the no-arg ctor + setters. Since `id` has no setter, malicious clients can't pre-assign ids.
-- **H2 config** in `application.properties`:
-  - `spring.datasource.url=jdbc:h2:mem:library` — in-memory; data lives only while app runs.
-  - `spring.jpa.hibernate.ddl-auto=create-drop` — Hibernate creates schema from entities on startup, drops on shutdown. For real apps later: `none` + Flyway migrations.
-  - `spring.jpa.show-sql=true` + `hibernate.format_sql=true` — every SQL Hibernate runs prints to console. Hugely valuable for understanding what JPA is doing under the hood.
-  - `spring.h2.console.enabled=true` — browse the DB at `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:library`, user `sa`, no password).
+- Custom exceptions extend `RuntimeException`. They know nothing about HTTP. They're domain signals.
+- HTTP translation lives in `@RestControllerAdvice` + `@ExceptionHandler(SomeException.class)`.
+- Shared response: `common/ErrorResponse` record. Records preserve component order in JSON (`Map.of` is unordered).
+- Helpers: `notFound(message)`, `badRequest(message, errors)` collapse each handler to ~1 line.
 
-### Mid-session: Full CRUD + first global exception handler
+Handlers registered:
 
-Built out the remaining HTTP verbs on `/api/v1/books`. Several concepts landed:
+| Exception                             | Status | Cause                                                                                                                                                                       |
+| ------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BookNotFoundException`               | 404    | domain not-found                                                                                                                                                            |
+| `NoResourceFoundException`            | 404    | unknown route; replaces Whitelabel page                                                                                                                                     |
+| `MethodArgumentNotValidException`     | 400    | `@Valid` body failed — emits field errors                                                                                                                                   |
+| `HandlerMethodValidationException`    | 400    | `@PathVariable`/`@RequestParam` Bean Validation failed (Spring 6.1+; auto, no `@Validated` needed). API: `getParameterValidationResults()` (NOT `getAllValidationResults`). |
+| `MethodArgumentTypeMismatchException` | 400    | path/query type conversion failed (e.g. `/books/hhjg` for `Long`)                                                                                                           |
+| `HttpMessageNotReadableException`     | 400    | malformed JSON / wrong content-type                                                                                                                                         |
 
-- **`@PathVariable`** binds a URL segment (`/{bookId}`) to a method parameter. The variable name in the annotation must match the placeholder in the path (or pass `@PathVariable("bookId")` explicitly).
-- **`Optional<T>` from `findById`** — Spring Data returns `Optional` rather than nullable values. `findById(id).orElseThrow(() -> new BookNotFoundException(id))` is the idiomatic pattern. Forces you to handle "not found" at the call site.
-- **PUT vs PATCH — the conceptual heart of this step:**
-  - **PUT** = full replacement. Client sends the entire new representation; missing fields default. Implementation: load existing, overwrite all fields, save.
-  - **PATCH** = partial update. Client sends only the fields they want to change; missing fields mean "don't touch". Implementation needs a DTO with **nullable wrapper types** (`Integer`, not `int`) so the controller can distinguish "absent" from "set to 0".
-- **`BookPatchRequest` record** — first proper DTO. Records are perfect here: immutable, no boilerplate. Records aren't usable as JPA entities (they need a no-arg constructor and mutability), but for request/response payloads they're ideal.
-- **Custom domain exceptions** — `BookNotFoundException extends RuntimeException` knows nothing about HTTP. It's a _domain signal_. The HTTP translation lives elsewhere — see below.
-- **`@RestControllerAdvice` + `@ExceptionHandler`** — created `common/GlobalExceptionHandler` (the first inhabitant of `common/`, which we'd predicted would house cross-cutting code). One `@ExceptionHandler(BookNotFoundException.class)` method turns the exception into a JSON 404. As more exception types appear, they all funnel through this one class — controllers stay clean.
-- **`@ResponseStatus`** — declarative way to set the HTTP status on a method (e.g. 204 for DELETE, 201 for POST). Simpler than `ResponseEntity` when the status is fixed.
-- **`@ResponseStatus(HttpStatus.NO_CONTENT)`** on a `void` DELETE method — REST convention: successful delete returns 204, no body.
+`@ResponseStatus(HttpStatus.X)` on a `void` method sets status without `ResponseEntity`.
 
-**Key habit to internalize:** controllers should throw domain exceptions and never construct HTTP error responses inline. Push all HTTP-translation logic into the `@RestControllerAdvice`.
+## Bean Validation
 
-### Design principle: group by data, separate by behavior
+| Annotation                                 | Behavior                                                        |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| `@NotBlank`                                | string non-null AND non-empty AND not whitespace-only           |
+| `@NotNull`                                 | non-null; use on wrapper types only (meaningless on primitives) |
+| `@Size`, `@Min`, `@Max`, `@PositiveOrZero` | **null-tolerant** — skip nulls; safe on PATCH                   |
 
-Asked whether to consolidate book exceptions into one file and book DTOs into one file. Answer is different for each:
+- DTO bounds must match entity bounds (defense in depth).
+- For future Stripe-style string ids (`book_abc123`): `@Pattern` on the path variable is the only thing distinguishing 400-malformed from 404-not-found — every string parses as `String`, so type-mismatch handler won't fire.
 
-- **DTOs → group together** in a feature namespace, e.g. `BookDto` as an interface with nested records: `BookDto.PatchRequest`, `BookDto.Response`. Reasons: DTOs are tiny data shapes, often evolve together, and the namespacing (`BookDto.X`) makes call sites clearer. Interface (vs. final class) is the cleaner idiom — members are implicitly `public static`.
-- **Exceptions → one per file.** Reasons: exceptions are dispatched **by type** (`@ExceptionHandler(BookNotFoundException.class)`). Collapsing them into one class with a `kind` enum throws away type-based routing and forces switch-on-enum logic. Different exceptions also tend to carry different data. Sealed class hierarchies are a legitimate middle ground (Java 17+) but overkill for now.
+## Service layer
 
-**The principle:** group by data, separate by behavior.
+- `@Service` ≡ `@Component` (semantic only).
+- `@Transactional` — Spring AOP wraps method in DB tx. `RuntimeException` rolls back.
+- Class-level `@Transactional(readOnly = true)` + method-level `@Transactional` on writes. Hibernate skips dirty-checking on read-only.
+- Service takes request DTOs directly for now. Translate to internal command types only when a second caller (CLI, GraphQL, scheduled job) needs it.
 
-### Global "not found" handler
+## MapStruct
 
-Earlier deferred — now added. Two handlers in `GlobalExceptionHandler`:
+- Compile-time annotation processor; generates `XxxImpl` (plain getter→setter, no reflection, debuggable).
+- `@Mapper(componentModel = "spring")` → generated impl is a `@Component`; injected via constructor.
+- Works fine on Java 25 / Spring Boot 4.0.6 — uses standard JSR-269 APIs.
 
-- `BookNotFoundException` — thrown by the controller for a missing book id.
-- `NoResourceFoundException` (`org.springframework.web.servlet.resource`) — Spring throws this when no route matches any request. Adding a handler for it replaces Spring's Whitelabel HTML page with consistent JSON 404s for _all_ clients, not just those sending `Accept: application/json`.
+`BookMapper` methods:
 
-Extracted a private `notFound(message)` helper at the same time. Two consumers of the same shape = the right moment to DRY it (any sooner would be premature).
+| Method                                                            | Use           | Notes                                                                                      |
+| ----------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------ |
+| `toResponse(BookEntity)`                                          | GET response  |                                                                                            |
+| `toResponses(List<BookEntity>)`                                   | list response | auto-delegates to `toResponse` per item                                                    |
+| `toEntity(WriteRequest)`                                          | POST          | `@Mapping(target="id", ignore=true)` — DB owns id                                          |
+| `updateFromWriteRequest(@MappingTarget BookEntity, WriteRequest)` | PUT           | full overwrite, id preserved                                                               |
+| `updatePatch(@MappingTarget BookEntity, PatchRequest)`            | PATCH         | `@BeanMapping(nullValuePropertyMappingStrategy = IGNORE)` — null fields leave target alone |
 
-### Mid-session: Input validation (Bean Validation / Jakarta Validation)
+When to add MapStruct: copy-pasted the same mapping 3 times, or entity has many fields. Skip for 1–2 field DTOs.
 
-Took validation seriously. Two distinct validation scenarios, both end in HTTP 400 but use different mechanisms:
+## Logging (SLF4J)
 
-1. **Path/query parameter conversion** (`/books/hhjg` where bookId is `Long`) — Spring fails the conversion _before_ the controller runs and throws `MethodArgumentTypeMismatchException`. Caught in `GlobalExceptionHandler`.
-2. **Body content validation** (title length, count range, missing required fields) — done with **Bean Validation** annotations + `@Valid` on the `@RequestBody` parameter. Spring runs constraints before calling the method; on failure throws `MethodArgumentNotValidException`. Caught in `GlobalExceptionHandler` and converted to a 400 with a `errors[]` array of `{field, message}` entries.
-3. **(Bonus)** Malformed JSON throws `HttpMessageNotReadableException`. Also handled, also 400.
+- Pattern per class: `private static final Logger log = LoggerFactory.getLogger(X.class);` — static ensures one logger per class, named after FQN so per-package level filtering works.
+- SLF4J is a facade; Logback is the backend (bundled by Spring Boot).
+- Levels: `TRACE < DEBUG < INFO < WARN < ERROR`. Setting level emits that level and above.
 
-**Key annotation behaviors to remember:**
+Where this project logs what:
 
-- `@NotBlank` — string must be non-null AND non-empty AND not whitespace-only. Used on POST/PUT required fields.
-- `@NotNull` — value must not be null. Used **with wrapper types** (`Integer`), not primitives — `int` can't be null and `@NotNull` is meaningless there.
-- `@Size`, `@PositiveOrZero`, `@Min`, `@Max`, `@Positive`, `@Negative` — **null-tolerant**: they skip null values rather than failing. Perfect for PATCH where fields are optional but must be valid when present.
-- Use `Integer` (not `int`) on DTO fields when you need to distinguish "not sent" (null) from "sent as 0".
+| Site                                         | Level | Reason                           |
+| -------------------------------------------- | ----- | -------------------------------- |
+| Service writes (create/replace/patch/delete) | INFO  | state changes — permanent record |
+| Service reads (findAll/findById)             | DEBUG | high-frequency, off by default   |
+| `GlobalExceptionHandler` 4xx                 | DEBUG | client errors, not noise-worthy  |
+| Hypothetical 5xx                             | ERROR | our bug; log with throwable      |
 
-**Architectural moves at the same time:**
+- Parameterized: `log.info("created id={}", id)` — lazy. Never `"id=" + id` (eager).
+- Expensive arg? Use `log.info("...{}", () -> expensive())` is NOT SLF4J — instead guard with `if (log.isInfoEnabled())`.
+- Config: `logging.level.<pkg>=<level>` in `application.properties`.
+- Runtime override: `--logging.level.X=DEBUG` (CLI) or env `LOGGING_LEVEL_X=DEBUG`.
+- Structured JSON (Spring Boot 3.4+, built-in): `logging.structured.format.console={ecs|gelf|logstash}`. Off by default.
+- MDC = thread-local key/value context. Structured formatters emit MDC entries as top-level JSON fields. Not used yet — add when introducing a request-ID filter.
 
-- POST and PUT now take `BookDto.WriteRequest` (a DTO with validation) instead of `BookEntity`. The API DTO and the persistence entity are now separate types. This is the right shape long-term: validation on DTOs, persistence concerns on entities.
-- Created `common/ErrorResponse` record. With 5 exception handlers now returning the same JSON shape, extracting a typed record was overdue. Bonus: records preserve component order in the JSON output (`Map.of(...)` doesn't — it's an unordered map and Jackson would emit fields in hash order).
-- Refactored `GlobalExceptionHandler` to use `ErrorResponse.of(...)` static factories. Two private helpers — `notFound(...)` and `badRequest(...)` — make each new exception handler a one-liner.
+## Entity-level constraints / DDL
 
-### Mid-session: Parameter-level validation + service layer
+What lands in generated DDL:
 
-**Parameter validation (path variables).** Spring 6.1+ auto-runs Bean Validation constraints on `@PathVariable`/`@RequestParam` — no `@Validated` on the class needed. The thrown type is `HandlerMethodValidationException` (distinct from `MethodArgumentNotValidException`, which is for `@RequestBody` validation). Added `@Min(1)` on every `bookId` to demo. **The real value of this lands later:** when `bookId` migrates to a Stripe-style string id (`book_abc123`), `@Pattern(regexp = ...)` is the _only_ thing standing between malformed ids becoming 400s vs. quietly becoming 404s — because any string is a valid `String`, so the type-mismatch handler never fires.
+| Entity source                                        | DDL effect                                           |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| `@NotBlank` / `@NotNull` / `@Column(nullable=false)` | `NOT NULL`                                           |
+| `@Size(max=N)` on String / `@Column(length=N)`       | `VARCHAR(N)`                                         |
+| `@Min(a) @Max(b)` on numerics                        | `CHECK` (Hibernate; not guaranteed across providers) |
+| `@NotBlank` whitespace-only rule                     | runtime only — no portable SQL                       |
 
-Caught an API surprise while wiring this up: the method is `getParameterValidationResults()` (not `getAllValidationResults()`). Worth remembering as a debugging hint: when Spring throws an exception type you haven't seen, `javap` on its class in the jar is fast and authoritative.
+- `@Entity(name="...")` sets the JPQL entity name, NOT the table name. Use `@Table(name="...")` for the table.
+- Hibernate's `@Check(constraints="...")` for arbitrary DB-level rules (cross-column, regex). Not needed currently.
 
-**Service layer (`BookService`).** Pulled all business logic — find/throw/mutate/save — out of the controller. New layering:
-
-- **Controller**: HTTP concerns only (`@RequestBody`, `@PathVariable`, `@Valid`, status codes). One-line method bodies that delegate to the service.
-- **Service**: business rules, transaction boundaries, orchestration of the repository (and future collaborators).
-- **Repository**: persistence (Spring Data JPA).
-
-Key annotations:
-
-- **`@Service`** — Spring stereotype identical in behavior to `@Component`, semantically signals "business logic layer". Picked up by component scanning.
-- **`@Transactional`** — Spring AOP wraps the method in a DB transaction. On `RuntimeException` (e.g. `BookNotFoundException`), the transaction rolls back. Essential for read-modify-write flows so the whole sequence is atomic.
-- **`@Transactional(readOnly = true)` at class level** — defaults reads to read-only transactions (Hibernate skips dirty-checking → small perf + documents intent). Each write method overrides with method-level `@Transactional`. Idiomatic Spring pattern worth keeping.
-
-**Honest compromise documented for future-me:** the service currently accepts `BookDto.WriteRequest` and `BookDto.PatchRequest` directly. The "pure" approach is to translate request DTOs into internal command types (`CreateBookCommand`, etc.) at the controller boundary, so the service is API-shape-agnostic. Premature for a single-controller app; the signal to split is when a second caller (CLI, GraphQL, scheduled job) needs to invoke the service.
-
-### Mid-session: Response DTO + MapStruct + agent handoff doc
-
-**`BookDto.Response`** added. The controller now returns `BookDto.Response` (or `List<...>`), not `BookEntity`. The win: if `BookEntity` gains internal fields (e.g. `createdAt`, `internalNotes`), the JSON contract stays stable. **The entity stops being part of the public API.**
-
-**MapStruct (`BookMapper`).** Compile-time annotation processor that _generates_ the mapping code. The interface declares the shapes; the build produces a `BookMapperImpl` class that's plain getter→setter Java — no reflection, debuggable, JIT-friendly. Key methods used:
-
-- `toResponse` / `toResponses` — entity → response shape (the list variant is auto-generated by delegating to the single-item method).
-- `toEntity(WriteRequest)` — POST. `@Mapping(target = "id", ignore = true)` so the DB owns id assignment.
-- `updateFromWriteRequest(@MappingTarget entity, WriteRequest)` — PUT: full overwrite, id preserved.
-- `updatePatch(@MappingTarget entity, PatchRequest)` — PATCH. The trick: `@BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)` makes nulls mean "leave the target field alone" — replaces the manual `if (patch.field() != null)` chain we had in the service.
-
-**Why MapStruct over ModelMapper / hand-written:**
-
-- Compile-time field-name checking: typos fail the build, not at 3am in prod.
-- Zero runtime reflection — the generated code is the code you'd write by hand.
-- `componentModel = "spring"` makes the generated impl a `@Component`; constructor injection works as usual.
-
-**When MapStruct is NOT worth it:** 1–2 field DTOs. Manual mapping is fine and obvious. The honest "add MapStruct" signal: "I've copy-pasted the same mapping for the third time, or my Book class is up to 15 fields and the manual mapper is half my service file."
-
-Worth knowing also: MapStruct works fine with Java 25 / Spring Boot 4.0.6 even though the official compat matrix may lag behind the latest JDKs. The annotation processor uses standard JSR-269 APIs.
-
-### Mid-session: Agent handoff doc + anti-drift split
-
-Created `AGENTS.md` as the **canonical** project handoff doc (tool-neutral — any AI agent can read it and onboard). It contains: stack, architecture, conventions, agent role, tracking-file responsibilities.
-
-**Anti-drift design:** `CLAUDE.md` shrank to a _thin bootstrap_ that says "read AGENTS.md" plus a placeholder for Claude-only notes. No project info in CLAUDE.md anymore. Single source of truth = no drift possible. Whenever conventions or stack change, only one file needs updating.
-
-The mental model going forward:
-
-| File          | Role                                                                     |
-| ------------- | ------------------------------------------------------------------------ |
-| `AGENTS.md`   | Canonical project context. Stack, architecture, conventions, agent role. |
-| `CLAUDE.md`   | Thin pointer to AGENTS.md + Claude-only quirks (currently empty).        |
-| `PROGRESS.md` | Live task list. What's done, what's next.                                |
-| `JOURNEY.md`  | Chronological learning log. Concepts, decisions, gotchas.                |
-
-### Mid-session: Entity-level constraints + DDL inspection
-
-Pushed validation down to the entity layer in addition to the DTO. Two-layer rationale:
-
-- **DTO validation** (HTTP boundary) — gives clean 400s with field-level errors before anything reaches the DB.
-- **Entity validation** (`@NotBlank`, `@Size`, `@Min`, `@Max` on entity fields) — defense in depth. Fires on `repository.save(...)` regardless of caller (REST, future CLI, scheduled job). Throws `jakarta.validation.ConstraintViolationException` if it ever does fire.
-
-Subtle annotation tripwires worth remembering:
-
-- `@Entity(name = "...")` sets the **JPQL entity name**, _not_ the table name. For the table name use `@Table(name = "...")`. Hibernate defaulted the table to the entity name and made it work "by accident" — but the explicit form is cleaner.
-- For strings: `@NotBlank` rejects null, empty, _and_ whitespace-only. Strictly stronger than `@NotEmpty` (empty rejected) which is stronger than `@NotNull` (null rejected).
-
-What translates to DDL vs. what's runtime-only (inspected from the generated `create table` in the boot log):
-
-| Source on entity                                       | Lands in DDL                                                                               |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `@NotBlank` / `@NotNull` / `@Column(nullable = false)` | `not null`                                                                                 |
-| `@Size(max = N)` on String / `@Column(length = N)`     | `varchar(N)`                                                                               |
-| `@Min(a) @Max(b)` on numerics                          | Hibernate **does** emit a `CHECK` constraint here (not guaranteed for every JPA provider). |
-| `@NotBlank`'s "not whitespace-only" rule               | **Nothing** — runtime check only. No portable SQL for it.                                  |
-
-The DDL Hibernate generated for `books`:
+Generated DDL for `books`:
 
 ```sql
 create table books (
@@ -216,66 +174,14 @@ create table books (
 )
 ```
 
-If true DB-level enforcement of arbitrary rules is ever needed (e.g. cross-column checks, regex), reach for Hibernate's `@Check(constraints = "...")`. Not needed for the current shape.
+## Gotchas
 
----
+- **Trailing whitespace in `.properties`** — `spring.datasource.driver-class-name=org.h2.Driver····` makes Spring load `"org.h2.Driver    "` (with spaces) and fail with "Cannot load driver class". `.properties` preserves trailing whitespace; YAML/TOML strip. Editor: `files.trimTrailingWhitespace: true`.
+- **Records and `new`** — record's canonical constructor takes all components. No implicit no-arg ctor.
+- **`getAllValidationResults` doesn't exist** on `HandlerMethodValidationException`. Use `getParameterValidationResults()`. When an exception type is unfamiliar, `javap` on the class in the jar is fast and authoritative.
 
-### SLF4J logging — configurable level + optional JSON
+## Decisions
 
-**What SLF4J is.** A **facade**: a logging API (`org.slf4j.Logger`, `LoggerFactory`) that delegates to whatever backend is on the classpath. Spring Boot bundles **Logback** as the default backend. Code talks to SLF4J; ops swap backends without touching code. This is why every Java tutorial uses SLF4J even though Logback does the real work.
-
-**The pattern in every class that logs:**
-
-```java
-private static final Logger log = LoggerFactory.getLogger(BookService.class);
-```
-
-`static final` — one logger per class, created at class-load time, named after the class so per-package log levels work.
-
-**Levels, from chattiest to quietest:** `TRACE < DEBUG < INFO < WARN < ERROR`. Setting a level means "emit this **and everything more severe**." `INFO` is the usual default.
-
-**Where I logged what, and why:**
-
-| Place                                              | Level   | Rationale                                                                                   |
-| -------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
-| `BookService` writes (create/replace/patch/delete) | `INFO`  | State changes — worth a permanent record.                                                   |
-| `BookService` reads (findAll/findById)             | `DEBUG` | Can be very frequent; off by default, flip to `DEBUG` when troubleshooting.                 |
-| `GlobalExceptionHandler` 4xx handlers              | `DEBUG` | Client errors aren't _our_ bug. Logging them at `INFO+` pollutes the log with normal noise. |
-| (Hypothetical 5xx)                                 | `ERROR` | _Our_ bug. Always log with the throwable so the stack trace is captured.                    |
-
-**Parameterized messages — the `{}` placeholder:**
-
-```java
-log.info("created book id={} title='{}'", saved.getId(), saved.getTitle());
-```
-
-Lazy formatting. If the level is disabled, SLF4J never builds the string. Don't ever do `log.info("created book id=" + id)` — that concatenates eagerly even when nobody's listening.
-
-**Making it configurable in `application.properties`:**
-
-```properties
-logging.level.root=INFO
-logging.level.com.training.library=INFO
-# logging.level.org.hibernate.SQL=DEBUG
-```
-
-`logging.level.<package>=<level>` works per-package because each logger is named after the class' fully qualified name — Spring matches the longest-prefix package. Override at run time:
-
-- CLI: `./gradlew bootRun --args='--logging.level.com.training.library=DEBUG'`
-- Env: `LOGGING_LEVEL_COM_TRAINING_LIBRARY=DEBUG ./gradlew bootRun`
-
-**Structured logs (optional JSON output)** — Spring Boot 3.4+ added this built-in. One property:
-
-```properties
-# logging.structured.format.console=ecs
-```
-
-Built-in formats: `ecs` (Elastic Common Schema), `gelf` (Graylog), `logstash`. Unset = the normal human-readable Logback pattern. JSON output is what log aggregators (Elasticsearch/Kibana, Loki, Datadog, etc.) ingest cleanly — each line becomes a structured record with `timestamp`, `level`, `logger`, `message`, plus any **MDC** context. Locally you want it off; in a real deployment you want it on.
-
-**MDC = Mapped Diagnostic Context.** A thread-local map of key/value pairs. Things like `requestId`, `userId` get put into MDC at the start of a request and every log line on that thread automatically carries them. The structured formatters emit MDC entries as top-level JSON fields, making them queryable in the aggregator. We're not using MDC yet — flag for later when we add a request-ID filter.
-
-**Gotcha to remember.** Don't use `log.info("..." + expensiveCall())`. Even if `INFO` is enabled, you've coupled formatting to evaluation. Either use placeholders (`log.info("...{}", expensiveCall())`) or guard with `if (log.isInfoEnabled())`. Placeholders cover the 99% case; the explicit guard is only for genuinely costly computations.
-
----
-
-_Future sessions will add new dated entries below._
+- `AGENTS.md` is canonical; `CLAUDE.md` is a thin pointer. Project info lives in one file — anti-drift.
+- Tracking files: AGENTS (canonical), CLAUDE (pointer), PROGRESS (tasks), JOURNEY (history). Update after meaningful milestones.
+- Group by data, separate by behavior: DTOs grouped in `BookDto`; exceptions stay one-per-file.
