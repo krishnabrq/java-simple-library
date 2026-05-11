@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/api/v1/books")
 public class BookController {
@@ -37,21 +39,22 @@ public class BookController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  public BookEntity create(@RequestBody BookEntity book) {
+  public BookEntity create(@Valid @RequestBody BookDto.WriteRequest request) {
+    BookEntity book = new BookEntity(request.title(), request.count());
     return repository.save(book);
   }
 
   @PutMapping("/{bookId}")
-  public BookEntity replace(@PathVariable Long bookId, @RequestBody BookEntity update) {
+  public BookEntity replace(@PathVariable Long bookId, @Valid @RequestBody BookDto.WriteRequest request) {
     BookEntity existing = repository.findById(bookId)
         .orElseThrow(() -> new BookNotFoundException(bookId));
-    existing.setTitle(update.getTitle());
-    existing.setCount(update.getCount());
+    existing.setTitle(request.title());
+    existing.setCount(request.count());
     return repository.save(existing);
   }
 
   @PatchMapping("/{bookId}")
-  public BookEntity patch(@PathVariable Long bookId, @RequestBody BookDto.PatchRequest patch) {
+  public BookEntity patch(@PathVariable Long bookId, @Valid @RequestBody BookDto.PatchRequest patch) {
     BookEntity existing = repository.findById(bookId)
         .orElseThrow(() -> new BookNotFoundException(bookId));
     if (patch.title() != null) {
