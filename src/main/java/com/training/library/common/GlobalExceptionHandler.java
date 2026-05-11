@@ -8,6 +8,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -30,9 +31,22 @@ public class GlobalExceptionHandler {
 
   // 400 — request body failed Bean Validation (@NotBlank, @Size, @Max, etc.)
   @ExceptionHandler(MethodArgumentNotValidException.class)
-  public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
+  public ResponseEntity<ErrorResponse> handleBodyValidation(MethodArgumentNotValidException ex) {
     List<ErrorResponse.FieldError> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
         .map(fe -> new ErrorResponse.FieldError(fe.getField(), fe.getDefaultMessage()))
+        .toList();
+    return badRequest("Validation failed", fieldErrors);
+  }
+
+  // 400 — method parameter (e.g. @PathVariable, @RequestParam) failed
+  // Bean Validation constraints like @Min, @Pattern, etc.
+  @ExceptionHandler(HandlerMethodValidationException.class)
+  public ResponseEntity<ErrorResponse> handleParameterValidation(HandlerMethodValidationException ex) {
+    List<ErrorResponse.FieldError> fieldErrors = ex.getParameterValidationResults().stream()
+        .flatMap(result -> result.getResolvableErrors().stream()
+            .map(err -> new ErrorResponse.FieldError(
+                result.getMethodParameter().getParameterName(),
+                err.getDefaultMessage())))
         .toList();
     return badRequest("Validation failed", fieldErrors);
   }

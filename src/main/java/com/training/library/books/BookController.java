@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 
 @RestController
 @RequestMapping("/api/v1/books")
@@ -32,7 +33,7 @@ public class BookController {
   }
 
   @GetMapping("/{bookId}")
-  public BookEntity get(@PathVariable Long bookId) {
+  public BookEntity get(@PathVariable @Min(1) Long bookId) {
     return repository.findById(bookId)
         .orElseThrow(() -> new BookNotFoundException(bookId));
   }
@@ -45,7 +46,7 @@ public class BookController {
   }
 
   @PutMapping("/{bookId}")
-  public BookEntity replace(@PathVariable Long bookId, @Valid @RequestBody BookDto.WriteRequest request) {
+  public BookEntity replace(@PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.WriteRequest request) {
     BookEntity existing = repository.findById(bookId)
         .orElseThrow(() -> new BookNotFoundException(bookId));
     existing.setTitle(request.title());
@@ -54,7 +55,7 @@ public class BookController {
   }
 
   @PatchMapping("/{bookId}")
-  public BookEntity patch(@PathVariable Long bookId, @Valid @RequestBody BookDto.PatchRequest patch) {
+  public BookEntity patch(@PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.PatchRequest patch) {
     BookEntity existing = repository.findById(bookId)
         .orElseThrow(() -> new BookNotFoundException(bookId));
     if (patch.title() != null) {
@@ -68,7 +69,7 @@ public class BookController {
 
   @DeleteMapping("/{bookId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void delete(@PathVariable Long bookId) {
+  public void delete(@PathVariable @Min(1) Long bookId) {
     if (!repository.existsById(bookId)) {
       throw new BookNotFoundException(bookId);
     }
