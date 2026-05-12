@@ -19,7 +19,7 @@ Spring Boot learning sandbox. Owner: Krishna (Java beginner, learning Spring Boo
 
 - Spring Boot 4.0.6, Java 25, Gradle.
 - Starters: `web-mvc`, `data-jpa`, `validation`, `devtools`.
-- PostgreSQL (`localhost:5432`, user `postgres`). Dev DB: `library`. Test DB: `library_test` (isolated via `src/test/resources/application.properties`).
+- PostgreSQL on `localhost:5432`. Connection details + log/DB toggles come from `.env` at the project root (loaded via `spring.config.import=optional:file:./.env[.properties]`). `.env.example` is committed as a template; `.env` is gitignored. Test DB name comes from the same `DB_NAME` env var — caller is responsible for pointing it at `library_test` before running tests (`DB_NAME=library_test ./gradlew test`).
 - MapStruct 1.6.3 (compile-time entity ↔ DTO).
 - Logging: SLF4J facade + Logback backend (default).
 
@@ -95,7 +95,8 @@ Makefile wraps Gradle.
 | `make format-check`  | `./gradlew spotlessCheck` (verify formatting, fails on diff) |
 
 - App: http://localhost:8080/api/v1/books
-- Postgres dev DB: `jdbc:postgresql://localhost:5432/library` (user `postgres`). Schema auto-managed by Hibernate (`ddl-auto=update`) until Flyway lands.
+- Postgres dev DB: `jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}` (defaults `localhost:5432/library`, user `postgres`). Schema auto-managed by Hibernate (`DB_DDL_AUTO=update` by default) until Flyway lands.
+- Local env: copy `.env.example` to `.env` and edit. Shell env vars (`DB_NAME=library_test ./gradlew test`) override `.env` values via Spring Boot's property-source precedence.
 - Hot reload: run `make run` and `make watch` in separate terminals. DevTools restarts the embedded server when class files change.
 
 ## Tracking files

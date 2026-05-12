@@ -35,6 +35,18 @@ Concept-keyed reference of what's been learned and decided. Not chronological. E
 - Shared infra: `storage/` (S3), `messaging/` (queues), `config/` (`@Configuration` classes), `common/` (post-second-consumer).
 - Don't pre-create empty packages.
 
+## Externalised config (.env)
+
+- Spring Boot natively supports placeholder substitution in properties files: `${VAR:default}`. Resolves against any registered `PropertySource` — OS env vars, JVM args, imported files.
+- `.env` files are read with `spring.config.import=optional:file:./.env[.properties]`.
+  - `optional:` — missing file is fine (CI sets env vars directly).
+  - `file:./.env` — relative to the JVM's working directory.
+  - `[.properties]` — extension hint; tells Spring to parse the file as Java `.properties` format (KEY=VALUE) even though it has no `.properties` suffix.
+- **Property-source precedence (high → low)**: command-line args > JVM system props > OS env vars > imported config files (`.env`) > `application.properties`. So `DB_NAME=library_test ./gradlew test` overrides whatever's in `.env` without editing it.
+- `.env` format is plain `.properties`: no quoting, no `$VAR` shell expansion, no `export`. Special chars (`@`, `:`) are literal.
+- Test isolation rule of thumb: things that *vary by deployment* (host, credentials, log level) → `.env`. Things that are *test invariants* (`ddl-auto=create-drop`, `show-sql=false`) → hardcoded in `src/test/resources/application.properties`. DB name straddles the line — kept as an env var here so the developer explicitly opts into the test DB, but at the cost of footgun risk (running tests with the dev `DB_NAME` will wipe dev data via `bookRepository.deleteAll()`).
+- `.env` is gitignored; `.env.example` (same keys, sample values) is committed so the schema of expected env vars is discoverable.
+
 ## JPA + PostgreSQL
 
 - Driver: `org.postgresql:postgresql` (runtimeOnly). Spring Boot auto-detects the dialect from the JDBC URL — no `spring.jpa.properties.hibernate.dialect` needed.
