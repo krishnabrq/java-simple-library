@@ -22,8 +22,9 @@
 - First test: `@SpringBootTest` (end-to-end API tests) and `@ExtendWith(MockitoExtension.class)` (unit tests) added. Test coverage via `jacoco`.
 - Pagination on `GET /api/v1/books` via Spring Data `Page` / `PageRequest`. Query params: `page` (default 1, `@Min(1)`) and `limit` (default 10, `@Min(10) @Max(50)`). API page is 1-based; service subtracts 1 for Spring Data's 0-based `PageRequest`. Meta: `{total, next_page, prev_page}`; `next_page`/`prev_page` omitted via `@JsonInclude(NON_NULL)` when no neighbour.
 - Root-key envelopes on all book request/response bodies (`{"book": {...}}`, list returns `{"books": [...], "meta": {...}}`). Implemented as DTO records: `WriteEnvelope`, `PatchEnvelope`, `ResponseEnvelope`, `ListEnvelope`. `@Valid @NotNull` on the envelope's inner field cascades Bean Validation into the wrapped DTO.
+- Migrated H2 → PostgreSQL. Runtime dep `org.postgresql:postgresql` replaces `com.h2database:h2` + `spring-boot-h2console`. Dev DB `library` uses `ddl-auto=update`. Tests use `src/test/resources/application.properties` against `library_test` with `ddl-auto=create-drop`. `BookControllerTest` already calls `bookRepository.deleteAll()` between tests, so no further isolation needed.
 
 ## Next
 
 - Sorting on list (`Pageable` already in place; add `sort` query param).
-- Flyway migrations; switch `spring.jpa.hibernate.ddl-auto` off `create-drop`.
+- Flyway migrations; switch `spring.jpa.hibernate.ddl-auto` off `update`.

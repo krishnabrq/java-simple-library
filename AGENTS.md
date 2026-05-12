@@ -19,7 +19,7 @@ Spring Boot learning sandbox. Owner: Krishna (Java beginner, learning Spring Boo
 
 - Spring Boot 4.0.6, Java 25, Gradle.
 - Starters: `web-mvc`, `data-jpa`, `validation`, `devtools`.
-- H2 (in-memory) + H2 console.
+- PostgreSQL (`localhost:5432`, user `postgres`). Dev DB: `library`. Test DB: `library_test` (isolated via `src/test/resources/application.properties`).
 - MapStruct 1.6.3 (compile-time entity ↔ DTO).
 - Logging: SLF4J facade + Logback backend (default).
 
@@ -95,7 +95,7 @@ Makefile wraps Gradle.
 | `make format-check`  | `./gradlew spotlessCheck` (verify formatting, fails on diff) |
 
 - App: http://localhost:8080/api/v1/books
-- H2 console: http://localhost:8080/h2-console (JDBC `jdbc:h2:mem:library`, user `sa`, blank password)
+- Postgres dev DB: `jdbc:postgresql://localhost:5432/library` (user `postgres`). Schema auto-managed by Hibernate (`ddl-auto=update`) until Flyway lands.
 - Hot reload: run `make run` and `make watch` in separate terminals. DevTools restarts the embedded server when class files change.
 
 ## Tracking files
