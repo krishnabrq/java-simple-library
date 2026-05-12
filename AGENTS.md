@@ -28,14 +28,20 @@ Spring Boot learning sandbox. Owner: Krishna (Java beginner, learning Spring Boo
 ```
 com.training.library/
 ├── LibraryApplication.java          # entry point
-├── books/                           # feature package
+├── books/                           # feature package — full CRUD
 │   ├── BookController.java          # HTTP
 │   ├── BookService.java             # logic + transactions
 │   ├── BookRepository.java          # Spring Data JPA interface
 │   ├── BookEntity.java              # @Entity
-│   ├── BookDto.java                 # nested records: WriteRequest, PatchRequest, Response
+│   ├── BookDto.java                 # nested records: WriteRequest, UpdateRequest, PatchRequest, Response
 │   ├── BookMapper.java              # MapStruct
 │   └── BookNotFoundException.java
+├── staffs/                          # feature package — entity only (no CRUD yet)
+│   └── StaffEntity.java             # @Entity
+├── members/                         # feature package — entity only (no CRUD yet)
+│   └── MemberEntity.java            # @Entity
+├── loans/                           # feature package — entity only (no CRUD yet)
+│   └── BookLoanEntity.java          # @Entity (FKs to BookEntity + MemberEntity)
 └── common/                          # cross-cutting
 	├── GlobalExceptionHandler.java  # @RestControllerAdvice
 	└── ErrorResponse.java
@@ -55,7 +61,8 @@ Mapper converts DTO ↔ entity at controller boundary. Service returns entity; c
 
 ## Conventions
 
-- Package-by-feature (`books/`, future `authors/`, `loans/`). Not package-by-layer. Do not migrate.
+- Package-by-feature (`books/`, `staffs/`, `members/`, `loans/`). Not package-by-layer. Do not migrate.
+- Cross-feature associations: a feature's `Entity` is `public` when other features need to reference it via `@ManyToOne` etc.; otherwise it stays package-private. Internals (DTOs, mappers, services) stay package-private.
 - DTOs: group via interface namespace (`BookDto.WriteRequest` etc.). Records for DTOs.
 - Exceptions: one-per-file (type-based `@ExceptionHandler` dispatch).
 - Cross-cutting packages: `common/`, `config/`, `storage/`, `messaging/`. Don't pre-create empty ones.

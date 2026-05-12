@@ -40,9 +40,9 @@ public class BookService {
   }
 
   @Transactional
-  public BookEntity replace(Long bookId, BookDto.WriteRequest request) {
+  public BookEntity replace(Long bookId, BookDto.UpdateRequest request) {
     BookEntity existing = findOrThrow(bookId);
-    mapper.updateFromWriteRequest(existing, request);
+    mapper.updateFromUpdateRequest(existing, request);
     BookEntity saved = repository.save(existing);
     log.info("replaced book id={}", saved.getId());
     return saved;

@@ -9,15 +9,33 @@ import jakarta.persistence.Table;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "books")
-class BookEntity {
+// SQLDelete intercepts repository.delete*: instead of DELETE, run UPDATE on deleted_at.
+// SQLRestriction is appended to every load/find/JPQL select so soft-deleted rows are invisible.
+@SQLDelete(sql = "UPDATE books SET deleted_at = NOW() WHERE id = ?")
+@SQLRestriction("deleted_at IS NULL")
+public class BookEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
+
+  // ISBN-10 (10 chars) or ISBN-13 (13 chars), digits with optional trailing 'X' on ISBN-10.
+  // Partial unique index (active rows only) lives in src/main/resources/import.sql — JPA
+  // can't express WHERE clauses on indexes.
+  @NotBlank
+  @Pattern(regexp = "^(\\d{9}[\\dX]|\\d{13})$", message = "must be a valid ISBN-10 or ISBN-13")
+  @Column(nullable = false, length = 13)
+  private String isbn;
 
   @NotBlank
   @Size(min = 1, max = 1000)
@@ -29,16 +47,25 @@ class BookEntity {
   @Column(nullable = false)
   private int count;
 
-  // No-arg constructor: required by JPA (and used by Jackson when deserializing JSON).
-  public BookEntity() {}
+  @CreationTimestamp
+  @Column(name = "created_at", nullable = false, updatable = false)
+  private Instant createdAt;
 
-  public BookEntity(String title, int count) {
-    this.title = title;
-    this.count = count;
-  }
+  @UpdateTimestamp
+  @Column(name = "updated_at", nullable = false)
+  private Instant updatedAt;
+
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
+
+  public BookEntity() {}
 
   public Long getId() {
     return id;
+  }
+
+  public String getIsbn() {
+    return isbn;
   }
 
   public String getTitle() {
@@ -47,6 +74,22 @@ class BookEntity {
 
   public int getCount() {
     return count;
+  }
+
+  public Instant getCreatedAt() {
+    return createdAt;
+  }
+
+  public Instant getUpdatedAt() {
+    return updatedAt;
+  }
+
+  public Instant getDeletedAt() {
+    return deletedAt;
+  }
+
+  public void setIsbn(String isbn) {
+    this.isbn = isbn;
   }
 
   public void setTitle(String title) {

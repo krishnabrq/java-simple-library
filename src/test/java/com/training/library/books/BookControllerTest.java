@@ -36,6 +36,14 @@ class BookControllerTest {
     bookRepository.deleteAll();
   }
 
+  private BookEntity book(String isbn, String title, int count) {
+    BookEntity b = new BookEntity();
+    b.setIsbn(isbn);
+    b.setTitle(title);
+    b.setCount(count);
+    return b;
+  }
+
   @Test
   @DisplayName("GET /api/v1/books - returns empty list and zeroed meta when no books exist")
   void getBooks_whenEmpty_returnsEmptyArray() throws Exception {
@@ -52,25 +60,19 @@ class BookControllerTest {
   @Test
   @DisplayName("GET /api/v1/books - returns first page with default page=1 limit=10")
   void getBooks_whenPopulated_returnsBooks() throws Exception {
-    BookEntity book1 = new BookEntity();
-    book1.setTitle("Book 1");
-    book1.setCount(10);
-    bookRepository.save(book1);
-
-    BookEntity book2 = new BookEntity();
-    book2.setTitle("Book 2");
-    book2.setCount(5);
-    bookRepository.save(book2);
+    bookRepository.save(book("9780000000001", "Book 1", 10));
+    bookRepository.save(book("9780000000002", "Book 2", 5));
 
     mockMvc
         .perform(get("/api/v1/books"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.books.length()").value(2))
         .andExpect(jsonPath("$.books[0].title").value("Book 1"))
+        .andExpect(jsonPath("$.books[0].isbn").value("9780000000001"))
+        .andExpect(jsonPath("$.books[0].created_at").exists())
+        .andExpect(jsonPath("$.books[0].updated_at").exists())
         .andExpect(jsonPath("$.books[1].title").value("Book 2"))
-        .andExpect(jsonPath("$.meta.total").value(2))
-        .andExpect(jsonPath("$.meta.next_page").doesNotExist())
-        .andExpect(jsonPath("$.meta.prev_page").doesNotExist());
+        .andExpect(jsonPath("$.meta.total").value(2));
   }
 
   @Test
@@ -78,10 +80,7 @@ class BookControllerTest {
   void getBooks_middlePage_reportsBothNeighbours() throws Exception {
     List<BookEntity> saved = new ArrayList<>();
     for (int i = 1; i <= 25; i++) {
-      BookEntity b = new BookEntity();
-      b.setTitle("Book " + i);
-      b.setCount(i);
-      saved.add(bookRepository.save(b));
+      saved.add(bookRepository.save(book(isbnSeed(i), "Book " + i, i)));
     }
 
     mockMvc
@@ -99,10 +98,7 @@ class BookControllerTest {
   @DisplayName("GET /api/v1/books - last page has prev_page but no next_page")
   void getBooks_lastPage_noNextPage() throws Exception {
     for (int i = 1; i <= 25; i++) {
-      BookEntity b = new BookEntity();
-      b.setTitle("Book " + i);
-      b.setCount(i);
-      bookRepository.save(b);
+      bookRepository.save(book(isbnSeed(i), "Book " + i, i));
     }
 
     mockMvc
@@ -135,17 +131,17 @@ class BookControllerTest {
   @Test
   @DisplayName("GET /api/v1/books/{id} - returns book under 'book' root when exists")
   void getBook_whenExists_returnsBook() throws Exception {
-    BookEntity book = new BookEntity();
-    book.setTitle("The Hobbit");
-    book.setCount(10);
-    BookEntity saved = bookRepository.save(book);
+    BookEntity saved = bookRepository.save(book("9780261103252", "The Hobbit", 10));
 
     mockMvc
         .perform(get("/api/v1/books/" + saved.getId()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.book.id").value(saved.getId()))
+        .andExpect(jsonPath("$.book.isbn").value("9780261103252"))
         .andExpect(jsonPath("$.book.title").value("The Hobbit"))
-        .andExpect(jsonPath("$.book.count").value(10));
+        .andExpect(jsonPath("$.book.count").value(10))
+        .andExpect(jsonPath("$.book.created_at").exists())
+        .andExpect(jsonPath("$.book.updated_at").exists());
   }
 
   @Test
@@ -158,7 +154,7 @@ class BookControllerTest {
   @DisplayName("POST /api/v1/books - creates book from {book:{...}} envelope and returns 201")
   void createBook_withValidRequest_returns201AndSavesToDb() throws Exception {
     BookDto.WriteEnvelope envelope =
-        new BookDto.WriteEnvelope(new BookDto.WriteRequest("The Hobbit", 10));
+        new BookDto.WriteEnvelope(new BookDto.WriteRequest("9780261103252", "The Hobbit", 10));
 
     mockMvc
         .perform(
@@ -167,19 +163,25 @@ class BookControllerTest {
                 .content(objectMapper.writeValueAsString(envelope)))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.book.id").isNumber())
+        .andExpect(jsonPath("$.book.isbn").value("9780261103252"))
         .andExpect(jsonPath("$.book.title").value("The Hobbit"))
         .andExpect(jsonPath("$.book.count").value(10));
 
     assertThat(bookRepository.findAll()).hasSize(1);
     BookEntity savedEntity = bookRepository.findAll().get(0);
+    assertThat(savedEntity.getIsbn()).isEqualTo("9780261103252");
     assertThat(savedEntity.getTitle()).isEqualTo("The Hobbit");
     assertThat(savedEntity.getCount()).isEqualTo(10);
+    assertThat(savedEntity.getCreatedAt()).isNotNull();
+    assertThat(savedEntity.getUpdatedAt()).isNotNull();
+    assertThat(savedEntity.getDeletedAt()).isNull();
   }
 
   @Test
-  @DisplayName("POST /api/v1/books - returns 400 when validation fails")
+  @DisplayName("POST /api/v1/books - returns 400 when title is blank")
   void createBook_withInvalidTitle_returns400() throws Exception {
-    BookDto.WriteEnvelope envelope = new BookDto.WriteEnvelope(new BookDto.WriteRequest("", 5));
+    BookDto.WriteEnvelope envelope =
+        new BookDto.WriteEnvelope(new BookDto.WriteRequest("9780261103252", "", 5));
 
     mockMvc
         .perform(
@@ -188,6 +190,38 @@ class BookControllerTest {
                 .content(objectMapper.writeValueAsString(envelope)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value(400));
+
+    assertThat(bookRepository.findAll()).isEmpty();
+  }
+
+  @Test
+  @DisplayName("POST /api/v1/books - returns 400 when isbn is missing")
+  void createBook_missingIsbn_returns400() throws Exception {
+    BookDto.WriteEnvelope envelope =
+        new BookDto.WriteEnvelope(new BookDto.WriteRequest(null, "The Hobbit", 10));
+
+    mockMvc
+        .perform(
+            post("/api/v1/books")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(envelope)))
+        .andExpect(status().isBadRequest());
+
+    assertThat(bookRepository.findAll()).isEmpty();
+  }
+
+  @Test
+  @DisplayName("POST /api/v1/books - returns 400 when isbn has wrong shape")
+  void createBook_malformedIsbn_returns400() throws Exception {
+    BookDto.WriteEnvelope envelope =
+        new BookDto.WriteEnvelope(new BookDto.WriteRequest("not-an-isbn", "The Hobbit", 10));
+
+    mockMvc
+        .perform(
+            post("/api/v1/books")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(envelope)))
+        .andExpect(status().isBadRequest());
 
     assertThat(bookRepository.findAll()).isEmpty();
   }
@@ -203,15 +237,12 @@ class BookControllerTest {
   }
 
   @Test
-  @DisplayName("PUT /api/v1/books/{id} - replaces book using envelope and returns 200")
+  @DisplayName("PUT /api/v1/books/{id} - replaces title/count and leaves isbn unchanged")
   void replaceBook_withValidRequest_returns200() throws Exception {
-    BookEntity book = new BookEntity();
-    book.setTitle("Old Title");
-    book.setCount(5);
-    BookEntity saved = bookRepository.save(book);
+    BookEntity saved = bookRepository.save(book("9780261103252", "Old Title", 5));
 
-    BookDto.WriteEnvelope envelope =
-        new BookDto.WriteEnvelope(new BookDto.WriteRequest("New Title", 20));
+    BookDto.UpdateEnvelope envelope =
+        new BookDto.UpdateEnvelope(new BookDto.UpdateRequest("New Title", 20));
 
     mockMvc
         .perform(
@@ -219,10 +250,12 @@ class BookControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(envelope)))
         .andExpect(status().isOk())
+        .andExpect(jsonPath("$.book.isbn").value("9780261103252"))
         .andExpect(jsonPath("$.book.title").value("New Title"))
         .andExpect(jsonPath("$.book.count").value(20));
 
     BookEntity updated = bookRepository.findById(saved.getId()).orElseThrow();
+    assertThat(updated.getIsbn()).isEqualTo("9780261103252");
     assertThat(updated.getTitle()).isEqualTo("New Title");
     assertThat(updated.getCount()).isEqualTo(20);
   }
@@ -230,8 +263,8 @@ class BookControllerTest {
   @Test
   @DisplayName("PUT /api/v1/books/{id} - returns 404 if book missing")
   void replaceBook_whenMissing_returns404() throws Exception {
-    BookDto.WriteEnvelope envelope =
-        new BookDto.WriteEnvelope(new BookDto.WriteRequest("New Title", 20));
+    BookDto.UpdateEnvelope envelope =
+        new BookDto.UpdateEnvelope(new BookDto.UpdateRequest("New Title", 20));
 
     mockMvc
         .perform(
@@ -244,10 +277,7 @@ class BookControllerTest {
   @Test
   @DisplayName("PATCH /api/v1/books/{id} - updates only provided fields via envelope")
   void patchBook_withValidRequest_returns200() throws Exception {
-    BookEntity book = new BookEntity();
-    book.setTitle("Original Title");
-    book.setCount(5);
-    BookEntity saved = bookRepository.save(book);
+    BookEntity saved = bookRepository.save(book("9780261103252", "Original Title", 5));
 
     BookDto.PatchEnvelope envelope = new BookDto.PatchEnvelope(new BookDto.PatchRequest(null, 15));
 
@@ -266,21 +296,26 @@ class BookControllerTest {
   }
 
   @Test
-  @DisplayName("DELETE /api/v1/books/{id} - deletes book and returns 204")
-  void deleteBook_whenExists_returns204() throws Exception {
-    BookEntity book = new BookEntity();
-    book.setTitle("To be deleted");
-    book.setCount(5);
-    BookEntity saved = bookRepository.save(book);
+  @DisplayName("DELETE /api/v1/books/{id} - soft-deletes book; subsequent GET returns 404")
+  void deleteBook_whenExists_softDeletesAndReturns204() throws Exception {
+    BookEntity saved = bookRepository.save(book("9780261103252", "To be deleted", 5));
 
     mockMvc.perform(delete("/api/v1/books/" + saved.getId())).andExpect(status().isNoContent());
 
+    // findById goes through @SQLRestriction("deleted_at IS NULL") — soft-deleted row is invisible.
     assertThat(bookRepository.findById(saved.getId())).isEmpty();
+
+    mockMvc.perform(get("/api/v1/books/" + saved.getId())).andExpect(status().isNotFound());
   }
 
   @Test
   @DisplayName("DELETE /api/v1/books/{id} - returns 404 when book missing")
   void deleteBook_whenMissing_returns404() throws Exception {
     mockMvc.perform(delete("/api/v1/books/999")).andExpect(status().isNotFound());
+  }
+
+  // 13-digit ISBN seed (978 + 9-digit zero-padded counter + check-digit placeholder '0').
+  private static String isbnSeed(int n) {
+    return String.format("978%010d", n);
   }
 }

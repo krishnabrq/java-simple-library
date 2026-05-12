@@ -53,7 +53,7 @@ public class BookController {
 
   @PutMapping("/{bookId}")
   public BookDto.ResponseEnvelope replace(
-      @PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.WriteEnvelope envelope) {
+      @PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.UpdateEnvelope envelope) {
     return new BookDto.ResponseEnvelope(
         mapper.toResponse(service.replace(bookId, envelope.book())));
   }

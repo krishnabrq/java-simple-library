@@ -33,6 +33,7 @@ class BookServiceTest {
   @BeforeEach
   void setUp() {
     mockBook = new BookEntity();
+    mockBook.setIsbn("9780261103252");
     mockBook.setTitle("Mock Title");
     mockBook.setCount(10);
   }
@@ -90,8 +91,9 @@ class BookServiceTest {
   @Test
   @DisplayName("create - maps request, saves entity, and returns it")
   void create_savesAndReturnsBook() {
-    BookDto.WriteRequest request = new BookDto.WriteRequest("New Title", 5);
+    BookDto.WriteRequest request = new BookDto.WriteRequest("9780261103252", "New Title", 5);
     BookEntity mappedEntity = new BookEntity();
+    mappedEntity.setIsbn("9780261103252");
     mappedEntity.setTitle("New Title");
     mappedEntity.setCount(5);
 
@@ -109,7 +111,7 @@ class BookServiceTest {
   @Test
   @DisplayName("replace - throws when book missing")
   void replace_whenMissing_throwsException() {
-    BookDto.WriteRequest request = new BookDto.WriteRequest("New Title", 5);
+    BookDto.UpdateRequest request = new BookDto.UpdateRequest("New Title", 5);
     when(repository.findById(1L)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.replace(1L, request))
@@ -119,14 +121,14 @@ class BookServiceTest {
   @Test
   @DisplayName("replace - updates existing entity and saves")
   void replace_updatesAndSaves() {
-    BookDto.WriteRequest request = new BookDto.WriteRequest("New Title", 5);
+    BookDto.UpdateRequest request = new BookDto.UpdateRequest("New Title", 5);
     when(repository.findById(1L)).thenReturn(Optional.of(mockBook));
     when(repository.save(mockBook)).thenReturn(mockBook);
 
     BookEntity result = service.replace(1L, request);
 
     assertThat(result).isNotNull();
-    verify(mapper).updateFromWriteRequest(mockBook, request);
+    verify(mapper).updateFromUpdateRequest(mockBook, request);
     verify(repository).save(mockBook);
   }
 

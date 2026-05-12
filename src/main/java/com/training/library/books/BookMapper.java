@@ -14,17 +14,28 @@ public interface BookMapper {
 
   List<BookDto.Response> toResponses(List<BookEntity> entities);
 
-  // POST: build a new entity from the request. Id is assigned by the DB, so ignore it here.
+  // POST: build a new entity from the request. Id and audit columns are DB-assigned.
   @Mapping(target = "id", ignore = true)
+  @Mapping(target = "createdAt", ignore = true)
+  @Mapping(target = "updatedAt", ignore = true)
+  @Mapping(target = "deletedAt", ignore = true)
   BookEntity toEntity(BookDto.WriteRequest request);
 
-  // PUT: full replace. Id stays as it is on the loaded entity.
+  // PUT: full replace of mutable fields. ISBN, id, audit columns stay as-is on the loaded entity.
   @Mapping(target = "id", ignore = true)
-  void updateFromWriteRequest(@MappingTarget BookEntity entity, BookDto.WriteRequest request);
+  @Mapping(target = "isbn", ignore = true)
+  @Mapping(target = "createdAt", ignore = true)
+  @Mapping(target = "updatedAt", ignore = true)
+  @Mapping(target = "deletedAt", ignore = true)
+  void updateFromUpdateRequest(@MappingTarget BookEntity entity, BookDto.UpdateRequest request);
 
   // PATCH: only non-null fields overwrite. NullValuePropertyMappingStrategy.IGNORE
   // is what makes null mean "leave this field alone" instead of "set it to null".
   @Mapping(target = "id", ignore = true)
+  @Mapping(target = "isbn", ignore = true)
+  @Mapping(target = "createdAt", ignore = true)
+  @Mapping(target = "updatedAt", ignore = true)
+  @Mapping(target = "deletedAt", ignore = true)
   @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
   void updatePatch(@MappingTarget BookEntity entity, BookDto.PatchRequest patch);
 }

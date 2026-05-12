@@ -47,6 +47,31 @@ Concept-keyed reference of what's been learned and decided. Not chronological. E
 - Test isolation rule of thumb: things that *vary by deployment* (host, credentials, log level) → `.env`. Things that are *test invariants* (`ddl-auto=create-drop`, `show-sql=false`) → hardcoded in `src/test/resources/application.properties`. DB name straddles the line — kept as an env var here so the developer explicitly opts into the test DB, but at the cost of footgun risk (running tests with the dev `DB_NAME` will wipe dev data via `bookRepository.deleteAll()`).
 - `.env` is gitignored; `.env.example` (same keys, sample values) is committed so the schema of expected env vars is discoverable.
 
+## Soft deletes (Hibernate `@SQLDelete` + `@SQLRestriction`)
+
+- `@SQLDelete(sql = "UPDATE <table> SET deleted_at = NOW() WHERE id = ?")` rewrites Hibernate's DELETE statement. `repository.delete*` calls flow through this — no controller/service change needed.
+- `@SQLRestriction("deleted_at IS NULL")` is appended to every SELECT/JPQL query. Soft-deleted rows are invisible to `findById`, `findAll`, JPQL, derived queries — uniformly.
+- `existsById` honors `@SQLRestriction`, so the existing `if (!repo.existsById) throw 404` pattern keeps working: a second DELETE on the same id returns 404 just like a hard delete would.
+- Replaces the deprecated `@Where`. Both came from `org.hibernate.annotations`; `@SQLRestriction` is the supported one in Hibernate 6+.
+- Audit columns (`created_at`, `updated_at`): `@CreationTimestamp` and `@UpdateTimestamp` from `org.hibernate.annotations` are the Hibernate-specific equivalents of JPA's `@PrePersist`/`@PreUpdate` lifecycle hooks. Bound to `Instant`. Columns get `nullable=false`; `created_at` also `updatable=false`.
+- `deleted_at` is internal — never returned in DTOs. The `Response` record omits it.
+
+## Partial unique indexes (Postgres)
+
+- A *partial* unique index applies the uniqueness rule only to rows matching a `WHERE` predicate. Standard SQL doesn't have it; Postgres does: `CREATE UNIQUE INDEX ... ON tbl (col) WHERE predicate`.
+- Why it matters with soft deletes: a full unique index on `email` would block a user from re-registering after their previous account was soft-deleted. A partial index (`WHERE deleted_at IS NULL`) only enforces uniqueness against *active* rows.
+- JPA can't express it: `@UniqueConstraint` and `@Index` accept column lists only, no predicate. Three workarounds:
+  - `src/main/resources/import.sql` — runs after Hibernate's schema generation on every boot. Use `IF NOT EXISTS` for idempotency. *Chosen for now.*
+  - Flyway/Liquibase migrations — versioned, repeatable, the "right" answer for production.
+  - Native query in a `@PostConstruct` hook — works but couples app startup to DDL.
+
+## Immutable fields via DTO split
+
+- ISBN is immutable: settable only at creation. Enforcement options:
+  - **DTO split** (chosen): `WriteRequest` (POST, includes isbn) vs `UpdateRequest` (PUT, no isbn). Wire contract states immutability by construction — clients literally can't send a new ISBN through PUT. Plays well with MapStruct (separate `toEntity` and `updateFromUpdateRequest`).
+  - **Service check**: keep one DTO, reject PUT bodies whose ISBN differs from stored. Less code but a more confusing contract — the API says ISBN is settable, then refuses to set it.
+- Same shape will apply to other immutable identity fields later (e.g. a member's `email`, if treated as identity).
+
 ## JPA + PostgreSQL
 
 - Driver: `org.postgresql:postgresql` (runtimeOnly). Spring Boot auto-detects the dialect from the JDBC URL — no `spring.jpa.properties.hibernate.dialect` needed.
