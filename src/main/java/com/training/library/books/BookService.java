@@ -1,8 +1,9 @@
 package com.training.library.books;
 
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,9 +21,10 @@ public class BookService {
     this.mapper = mapper;
   }
 
-  public List<BookEntity> findAll() {
-    log.debug("listing all books");
-    return repository.findAll();
+  // Page is 1-based at the API edge; Spring Data is 0-based internally, so subtract here.
+  public Page<BookEntity> findAll(int page, int limit) {
+    log.debug("listing books page={} limit={}", page, limit);
+    return repository.findAll(PageRequest.of(page - 1, limit));
   }
 
   public BookEntity findById(Long bookId) {

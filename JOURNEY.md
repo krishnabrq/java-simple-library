@@ -212,6 +212,21 @@ Project workflow:
 - Tracking files: AGENTS (canonical), CLAUDE (pointer), PROGRESS (tasks), JOURNEY (history). Update after meaningful milestones.
 - Group by data, separate by behavior: DTOs grouped in `BookDto`; exceptions stay one-per-file.
 
+## Pagination (Spring Data)
+
+- `JpaRepository.findAll(Pageable)` returns `Page<T>`. `Page` exposes `getContent()`, `getTotalElements()`, `getTotalPages()`, `hasNext()`, `hasPrevious()`.
+- `PageRequest.of(pageIndex, size)` builds a `Pageable`. **`pageIndex` is 0-based.** Public API is usually 1-based; convert at the boundary (controller or service) — this project does it in the service.
+- Query-param defaults + bounds live on the controller method: `@RequestParam(defaultValue = "1") @Min(1) Integer page`, `@RequestParam(defaultValue = "10") @Min(10) @Max(50) Integer limit`. `HandlerMethodValidationException` → 400 via the existing handler.
+- Without an explicit `Sort`, ordering is whatever the DB hands back. H2 returns insertion order in practice, but production code should pass `Sort.by(...)` to `PageRequest.of(...)` for deterministic paging.
+- Meta calculation in controller: `nextPage = result.hasNext() ? page + 1 : null`, `prevPage = page > 1 ? page - 1 : null`. Nulls hidden from JSON via `@JsonInclude(NON_NULL)` on the `Meta` record.
+
+## Root-key envelopes
+
+- Every book payload (in and out) is wrapped under `"book"` (single) or `"books"` + `"meta"` (list). Wire format becomes self-describing and survives adding sibling top-level fields (`included`, `links`, `warnings`) without breaking clients.
+- Implementation: nested record envelopes in `BookDto` (`WriteEnvelope`, `PatchEnvelope`, `ResponseEnvelope`, `ListEnvelope`). Controller accepts/returns envelopes; service stays unaware of the wire shape.
+- `@Valid @NotNull` on the envelope's inner field is the trick: `@NotNull` rejects `{}` / `{"book": null}`; `@Valid` cascades Bean Validation into the wrapped DTO so `WriteRequest` constraints still fire. Field-error paths report `book.title` instead of `title` — accurate to the wire shape.
+- Snake_case JSON keys (`next_page`) on camelCase Java fields (`nextPage`) via `@JsonProperty("next_page")` from `com.fasterxml.jackson.annotation`. Per-field annotation chosen over a global `PropertyNamingStrategy` to keep the rest of the API explicit.
+
 ## Testing
 
 - **Integration Tests**: `@SpringBootTest` + `@AutoConfigureMockMvc` tests the entire application stack.

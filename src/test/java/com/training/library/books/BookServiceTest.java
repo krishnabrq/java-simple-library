@@ -15,6 +15,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 class BookServiceTest {
@@ -35,15 +38,29 @@ class BookServiceTest {
   }
 
   @Test
-  @DisplayName("findAll - delegates to repository and returns all books")
-  void findAll_returnsBooks() {
-    when(repository.findAll()).thenReturn(List.of(mockBook));
+  @DisplayName("findAll - delegates to repository with 0-based page request")
+  void findAll_returnsPage() {
+    PageRequest expected = PageRequest.of(0, 10);
+    Page<BookEntity> page = new PageImpl<>(List.of(mockBook), expected, 1);
+    when(repository.findAll(expected)).thenReturn(page);
 
-    List<BookEntity> result = service.findAll();
+    Page<BookEntity> result = service.findAll(1, 10);
 
-    assertThat(result).hasSize(1);
-    assertThat(result.get(0).getTitle()).isEqualTo("Mock Title");
-    verify(repository).findAll();
+    assertThat(result.getContent()).hasSize(1);
+    assertThat(result.getContent().get(0).getTitle()).isEqualTo("Mock Title");
+    assertThat(result.getTotalElements()).isEqualTo(1);
+    verify(repository).findAll(expected);
+  }
+
+  @Test
+  @DisplayName("findAll - converts 1-based API page to 0-based PageRequest")
+  void findAll_convertsToZeroBased() {
+    PageRequest expected = PageRequest.of(1, 10);
+    when(repository.findAll(expected)).thenReturn(new PageImpl<>(List.of(), expected, 0));
+
+    service.findAll(2, 10);
+
+    verify(repository).findAll(expected);
   }
 
   @Test

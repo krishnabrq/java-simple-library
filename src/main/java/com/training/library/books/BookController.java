@@ -1,8 +1,9 @@
 package com.training.library.books;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import java.util.List;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,31 +30,38 @@ public class BookController {
   }
 
   @GetMapping
-  public List<BookDto.Response> list() {
-    return mapper.toResponses(service.findAll());
+  public BookDto.ListEnvelope list(
+      @RequestParam(defaultValue = "1") @Min(1) Integer page,
+      @RequestParam(defaultValue = "10") @Min(10) @Max(50) Integer limit) {
+    Page<BookEntity> result = service.findAll(page, limit);
+    Integer nextPage = result.hasNext() ? page + 1 : null;
+    Integer prevPage = page > 1 ? page - 1 : null;
+    BookDto.Meta meta = new BookDto.Meta(result.getTotalElements(), nextPage, prevPage);
+    return new BookDto.ListEnvelope(mapper.toResponses(result.getContent()), meta);
   }
 
   @GetMapping("/{bookId}")
-  public BookDto.Response get(@PathVariable @Min(1) Long bookId) {
-    return mapper.toResponse(service.findById(bookId));
+  public BookDto.ResponseEnvelope get(@PathVariable @Min(1) Long bookId) {
+    return new BookDto.ResponseEnvelope(mapper.toResponse(service.findById(bookId)));
   }
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  public BookDto.Response create(@Valid @RequestBody BookDto.WriteRequest request) {
-    return mapper.toResponse(service.create(request));
+  public BookDto.ResponseEnvelope create(@Valid @RequestBody BookDto.WriteEnvelope envelope) {
+    return new BookDto.ResponseEnvelope(mapper.toResponse(service.create(envelope.book())));
   }
 
   @PutMapping("/{bookId}")
-  public BookDto.Response replace(
-      @PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.WriteRequest request) {
-    return mapper.toResponse(service.replace(bookId, request));
+  public BookDto.ResponseEnvelope replace(
+      @PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.WriteEnvelope envelope) {
+    return new BookDto.ResponseEnvelope(
+        mapper.toResponse(service.replace(bookId, envelope.book())));
   }
 
   @PatchMapping("/{bookId}")
-  public BookDto.Response patch(
-      @PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.PatchRequest patch) {
-    return mapper.toResponse(service.patch(bookId, patch));
+  public BookDto.ResponseEnvelope patch(
+      @PathVariable @Min(1) Long bookId, @Valid @RequestBody BookDto.PatchEnvelope envelope) {
+    return new BookDto.ResponseEnvelope(mapper.toResponse(service.patch(bookId, envelope.book())));
   }
 
   @DeleteMapping("/{bookId}")

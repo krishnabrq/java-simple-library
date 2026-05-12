@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,17 +37,20 @@ class BookControllerTest {
   }
 
   @Test
-  @DisplayName("GET /api/v1/books - returns empty list when no books exist")
+  @DisplayName("GET /api/v1/books - returns empty list and zeroed meta when no books exist")
   void getBooks_whenEmpty_returnsEmptyArray() throws Exception {
     mockMvc
         .perform(get("/api/v1/books"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$").isArray())
-        .andExpect(jsonPath("$").isEmpty());
+        .andExpect(jsonPath("$.books").isArray())
+        .andExpect(jsonPath("$.books").isEmpty())
+        .andExpect(jsonPath("$.meta.total").value(0))
+        .andExpect(jsonPath("$.meta.next_page").doesNotExist())
+        .andExpect(jsonPath("$.meta.prev_page").doesNotExist());
   }
 
   @Test
-  @DisplayName("GET /api/v1/books - returns all books")
+  @DisplayName("GET /api/v1/books - returns first page with default page=1 limit=10")
   void getBooks_whenPopulated_returnsBooks() throws Exception {
     BookEntity book1 = new BookEntity();
     book1.setTitle("Book 1");
@@ -60,13 +65,75 @@ class BookControllerTest {
     mockMvc
         .perform(get("/api/v1/books"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(2))
-        .andExpect(jsonPath("$[0].title").value("Book 1"))
-        .andExpect(jsonPath("$[1].title").value("Book 2"));
+        .andExpect(jsonPath("$.books.length()").value(2))
+        .andExpect(jsonPath("$.books[0].title").value("Book 1"))
+        .andExpect(jsonPath("$.books[1].title").value("Book 2"))
+        .andExpect(jsonPath("$.meta.total").value(2))
+        .andExpect(jsonPath("$.meta.next_page").doesNotExist())
+        .andExpect(jsonPath("$.meta.prev_page").doesNotExist());
   }
 
   @Test
-  @DisplayName("GET /api/v1/books/{id} - returns book when exists")
+  @DisplayName("GET /api/v1/books - middle page reports both next_page and prev_page")
+  void getBooks_middlePage_reportsBothNeighbours() throws Exception {
+    List<BookEntity> saved = new ArrayList<>();
+    for (int i = 1; i <= 25; i++) {
+      BookEntity b = new BookEntity();
+      b.setTitle("Book " + i);
+      b.setCount(i);
+      saved.add(bookRepository.save(b));
+    }
+
+    mockMvc
+        .perform(get("/api/v1/books").param("page", "2").param("limit", "10"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.books.length()").value(10))
+        .andExpect(jsonPath("$.books[0].title").value("Book 11"))
+        .andExpect(jsonPath("$.books[9].title").value("Book 20"))
+        .andExpect(jsonPath("$.meta.total").value(25))
+        .andExpect(jsonPath("$.meta.next_page").value(3))
+        .andExpect(jsonPath("$.meta.prev_page").value(1));
+  }
+
+  @Test
+  @DisplayName("GET /api/v1/books - last page has prev_page but no next_page")
+  void getBooks_lastPage_noNextPage() throws Exception {
+    for (int i = 1; i <= 25; i++) {
+      BookEntity b = new BookEntity();
+      b.setTitle("Book " + i);
+      b.setCount(i);
+      bookRepository.save(b);
+    }
+
+    mockMvc
+        .perform(get("/api/v1/books").param("page", "3").param("limit", "10"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.books.length()").value(5))
+        .andExpect(jsonPath("$.meta.total").value(25))
+        .andExpect(jsonPath("$.meta.next_page").doesNotExist())
+        .andExpect(jsonPath("$.meta.prev_page").value(2));
+  }
+
+  @Test
+  @DisplayName("GET /api/v1/books - returns 400 when page < 1")
+  void getBooks_pageBelowMin_returns400() throws Exception {
+    mockMvc.perform(get("/api/v1/books").param("page", "0")).andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /api/v1/books - returns 400 when limit < 10")
+  void getBooks_limitBelowMin_returns400() throws Exception {
+    mockMvc.perform(get("/api/v1/books").param("limit", "5")).andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /api/v1/books - returns 400 when limit > 50")
+  void getBooks_limitAboveMax_returns400() throws Exception {
+    mockMvc.perform(get("/api/v1/books").param("limit", "51")).andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /api/v1/books/{id} - returns book under 'book' root when exists")
   void getBook_whenExists_returnsBook() throws Exception {
     BookEntity book = new BookEntity();
     book.setTitle("The Hobbit");
@@ -76,8 +143,9 @@ class BookControllerTest {
     mockMvc
         .perform(get("/api/v1/books/" + saved.getId()))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.id").value(saved.getId()))
-        .andExpect(jsonPath("$.title").value("The Hobbit"));
+        .andExpect(jsonPath("$.book.id").value(saved.getId()))
+        .andExpect(jsonPath("$.book.title").value("The Hobbit"))
+        .andExpect(jsonPath("$.book.count").value(10));
   }
 
   @Test
@@ -87,19 +155,20 @@ class BookControllerTest {
   }
 
   @Test
-  @DisplayName("POST /api/v1/books - creates book and returns 201")
+  @DisplayName("POST /api/v1/books - creates book from {book:{...}} envelope and returns 201")
   void createBook_withValidRequest_returns201AndSavesToDb() throws Exception {
-    BookDto.WriteRequest request = new BookDto.WriteRequest("The Hobbit", 10);
+    BookDto.WriteEnvelope envelope =
+        new BookDto.WriteEnvelope(new BookDto.WriteRequest("The Hobbit", 10));
 
     mockMvc
         .perform(
             post("/api/v1/books")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .content(objectMapper.writeValueAsString(envelope)))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.id").isNumber())
-        .andExpect(jsonPath("$.title").value("The Hobbit"))
-        .andExpect(jsonPath("$.count").value(10));
+        .andExpect(jsonPath("$.book.id").isNumber())
+        .andExpect(jsonPath("$.book.title").value("The Hobbit"))
+        .andExpect(jsonPath("$.book.count").value(10));
 
     assertThat(bookRepository.findAll()).hasSize(1);
     BookEntity savedEntity = bookRepository.findAll().get(0);
@@ -110,13 +179,13 @@ class BookControllerTest {
   @Test
   @DisplayName("POST /api/v1/books - returns 400 when validation fails")
   void createBook_withInvalidTitle_returns400() throws Exception {
-    BookDto.WriteRequest request = new BookDto.WriteRequest("", 5);
+    BookDto.WriteEnvelope envelope = new BookDto.WriteEnvelope(new BookDto.WriteRequest("", 5));
 
     mockMvc
         .perform(
             post("/api/v1/books")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .content(objectMapper.writeValueAsString(envelope)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value(400));
 
@@ -124,23 +193,34 @@ class BookControllerTest {
   }
 
   @Test
-  @DisplayName("PUT /api/v1/books/{id} - replaces book and returns 200")
+  @DisplayName("POST /api/v1/books - returns 400 when 'book' root key is missing")
+  void createBook_missingRoot_returns400() throws Exception {
+    mockMvc
+        .perform(post("/api/v1/books").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isBadRequest());
+
+    assertThat(bookRepository.findAll()).isEmpty();
+  }
+
+  @Test
+  @DisplayName("PUT /api/v1/books/{id} - replaces book using envelope and returns 200")
   void replaceBook_withValidRequest_returns200() throws Exception {
     BookEntity book = new BookEntity();
     book.setTitle("Old Title");
     book.setCount(5);
     BookEntity saved = bookRepository.save(book);
 
-    BookDto.WriteRequest request = new BookDto.WriteRequest("New Title", 20);
+    BookDto.WriteEnvelope envelope =
+        new BookDto.WriteEnvelope(new BookDto.WriteRequest("New Title", 20));
 
     mockMvc
         .perform(
             put("/api/v1/books/" + saved.getId())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .content(objectMapper.writeValueAsString(envelope)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.title").value("New Title"))
-        .andExpect(jsonPath("$.count").value(20));
+        .andExpect(jsonPath("$.book.title").value("New Title"))
+        .andExpect(jsonPath("$.book.count").value(20));
 
     BookEntity updated = bookRepository.findById(saved.getId()).orElseThrow();
     assertThat(updated.getTitle()).isEqualTo("New Title");
@@ -150,34 +230,35 @@ class BookControllerTest {
   @Test
   @DisplayName("PUT /api/v1/books/{id} - returns 404 if book missing")
   void replaceBook_whenMissing_returns404() throws Exception {
-    BookDto.WriteRequest request = new BookDto.WriteRequest("New Title", 20);
+    BookDto.WriteEnvelope envelope =
+        new BookDto.WriteEnvelope(new BookDto.WriteRequest("New Title", 20));
 
     mockMvc
         .perform(
             put("/api/v1/books/999")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .content(objectMapper.writeValueAsString(envelope)))
         .andExpect(status().isNotFound());
   }
 
   @Test
-  @DisplayName("PATCH /api/v1/books/{id} - updates only provided fields")
+  @DisplayName("PATCH /api/v1/books/{id} - updates only provided fields via envelope")
   void patchBook_withValidRequest_returns200() throws Exception {
     BookEntity book = new BookEntity();
     book.setTitle("Original Title");
     book.setCount(5);
     BookEntity saved = bookRepository.save(book);
 
-    BookDto.PatchRequest request = new BookDto.PatchRequest(null, 15);
+    BookDto.PatchEnvelope envelope = new BookDto.PatchEnvelope(new BookDto.PatchRequest(null, 15));
 
     mockMvc
         .perform(
             patch("/api/v1/books/" + saved.getId())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .content(objectMapper.writeValueAsString(envelope)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.title").value("Original Title"))
-        .andExpect(jsonPath("$.count").value(15));
+        .andExpect(jsonPath("$.book.title").value("Original Title"))
+        .andExpect(jsonPath("$.book.count").value(15));
 
     BookEntity updated = bookRepository.findById(saved.getId()).orElseThrow();
     assertThat(updated.getTitle()).isEqualTo("Original Title");
