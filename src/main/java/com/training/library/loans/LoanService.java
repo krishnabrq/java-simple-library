@@ -10,6 +10,9 @@ import com.training.library.users.UserRole;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,15 +36,19 @@ public class LoanService {
   }
 
   // Borrow flow:
-  //   1. Resolve the caller from the live DB (rejects users that were deleted after their
-  //      JWT was issued).
-  //   2. Enforce role at the service layer — STAFF cannot borrow. Spring Security's
-  //      filter chain already gates the route to "authenticated", but the borrowing rule
-  //      is a domain rule and lives here.
-  //   3. Load the book, check there's at least one copy not currently on loan.
-  //   4. Insert the loan with borrowed_at = NOW(), returned_at = NULL.
-  // Race note: the count check is not atomic with the insert — two concurrent borrows can
-  // each pass the check and both create loans. Acceptable for this learning project; the
+  // 1. Resolve the caller from the live DB (rejects users that were deleted after
+  // their
+  // JWT was issued).
+  // 2. Enforce role at the service layer — STAFF cannot borrow. Spring Security's
+  // filter chain already gates the route to "authenticated", but the borrowing
+  // rule
+  // is a domain rule and lives here.
+  // 3. Load the book, check there's at least one copy not currently on loan.
+  // 4. Insert the loan with borrowed_at = NOW(), returned_at = NULL.
+  // Race note: the count check is not atomic with the insert — two concurrent
+  // borrows can
+  // each pass the check and both create loans. Acceptable for this learning
+  // project; the
   // real fix is a pessimistic lock or a count-based unique constraint.
   @Transactional
   public BookLoanEntity borrow(Long userId, Long bookId) {
@@ -66,11 +73,12 @@ public class LoanService {
   }
 
   // Return flow:
-  //   1. Resolve caller; enforce role.
-  //   2. Load the loan. If it doesn't exist OR belongs to a different user, we throw 404
-  //      — refusing to leak the existence of other members' loans.
-  //   3. Reject double-return (returned_at already set).
-  //   4. Set returned_at = NOW(), persist.
+  // 1. Resolve caller; enforce role.
+  // 2. Load the loan. If it doesn't exist OR belongs to a different user, we
+  // throw 404
+  // — refusing to leak the existence of other members' loans.
+  // 3. Reject double-return (returned_at already set).
+  // 4. Set returned_at = NOW(), persist.
   @Transactional
   public BookLoanEntity returnLoan(Long userId, Long loanId) {
     UserEntity user = requireUser(userId);
@@ -91,8 +99,18 @@ public class LoanService {
     return saved;
   }
 
-  // The JWT carries a user id in `sub`. The user may have been deleted between token
-  // issuance and now — translate the absence into an InvalidTokenException so the existing
+  public Page<BookLoanEntity> listMemberLoans(Long userId, int page, int limit) {
+    UserEntity user = requireUser(userId);
+    requireMember(user, "list loans");
+    log.debug("listing loans for user={} page={} limit={}", userId, page, limit);
+    return loanRepository.findAllByUserId(
+        userId, PageRequest.of(page - 1, limit, Sort.by(Sort.Direction.DESC, "borrowedAt")));
+  }
+
+  // The JWT carries a user id in `sub`. The user may have been deleted between
+  // token
+  // issuance and now — translate the absence into an InvalidTokenException so the
+  // existing
   // 401 handler maps it consistently with refresh-against-missing-user.
   private UserEntity requireUser(Long userId) {
     return userRepository

@@ -2,14 +2,17 @@ package com.training.library.loans;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -23,6 +26,19 @@ public class LoanController {
   public LoanController(LoanService service, LoanMapper mapper) {
     this.service = service;
     this.mapper = mapper;
+  }
+
+  @GetMapping
+  public LoanDto.ListEnvelope list(
+      @RequestParam(defaultValue = "1") @Min(1) Integer page,
+      @RequestParam(defaultValue = "10") @Min(10) @jakarta.validation.constraints.Max(50)
+          Integer limit,
+      @AuthenticationPrincipal Jwt jwt) {
+    Page<BookLoanEntity> result = service.listMemberLoans(subjectAsUserId(jwt), page, limit);
+    Integer nextPage = result.hasNext() ? page + 1 : null;
+    Integer prevPage = page > 1 ? page - 1 : null;
+    LoanDto.Meta meta = new LoanDto.Meta(result.getTotalElements(), nextPage, prevPage);
+    return new LoanDto.ListEnvelope(mapper.toListResponses(result.getContent()), meta);
   }
 
   // No @PreAuthorize: the MEMBER-only rule is enforced by LoanService against the live
