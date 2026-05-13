@@ -20,11 +20,6 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
-// Covers the role-boundary half of the books contract — filters ON, real JWTs.
-// BookControllerTest covers the domain logic (filters OFF). Splitting the concerns keeps
-// each suite small and the assertions targeted: "does the security chain enforce the
-// rule?" vs "does the controller/service produce the right behavior assuming the chain
-// already passed?".
 @SpringBootTest
 @AutoConfigureMockMvc
 class BookControllerSecurityTest {

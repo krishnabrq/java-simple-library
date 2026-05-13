@@ -9,11 +9,8 @@ import java.time.Instant;
 
 public interface LoanDto {
 
-  // Borrow body. The caller is identified by the JWT — no user_id in the body.
   record BorrowRequest(@JsonProperty("book_id") @NotNull @Positive Long bookId) {}
 
-  // Outbound shape. book_id / user_id are surfaced as IDs (not nested entities) so the
-  // response is small and FK joins stay opaque to clients.
   record Response(
       Long id,
       @JsonProperty("book_id") Long bookId,
@@ -27,7 +24,6 @@ public interface LoanDto {
 
   record BookSummary(Long id, String name) {}
 
-  // Shape for the list endpoint
   record ListResponse(
       Long id,
       BookSummary book,

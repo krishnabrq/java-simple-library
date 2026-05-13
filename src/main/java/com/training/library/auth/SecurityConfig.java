@@ -33,17 +33,10 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import tools.jackson.databind.ObjectMapper;
 
-// Web security baseline:
-// - Stateless JWT bearer auth (no sessions, no CSRF token cookie).
-// - /api/v1/auth/** is public (signup, login, refresh).
-// - Everything else requires a valid access token. Fine-grained role checks live on
-//   controllers via @PreAuthorize (enabled by @EnableMethodSecurity below).
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
 
-  // Shared HS256 secret. Must be ≥32 bytes (256 bits). No default — Spring fails fast at
-  // startup if jwt.secret isn't supplied, surfacing the misconfiguration immediately.
   private final byte[] secretBytes;
 
   public SecurityConfig(@Value("${jwt.secret}") String secret) {
@@ -58,7 +51,6 @@ public class SecurityConfig {
 
   @Bean
   public PasswordEncoder passwordEncoder() {
-    // Default strength = 10 rounds. Bumping to 12 in real prod when CPU budget allows.
     return new BCryptPasswordEncoder();
   }
 
@@ -75,9 +67,6 @@ public class SecurityConfig {
             auth ->
                 auth.requestMatchers("/api/v1/auth/**")
                     .permitAll()
-                    // Spring's internal error dispatch goes through /error before our
-                    // @RestControllerAdvice replies. Permit it so 4xx bodies aren't masked
-                    // by a 401 from the security chain.
                     .requestMatchers("/error")
                     .permitAll()
                     .anyRequest()
@@ -85,8 +74,6 @@ public class SecurityConfig {
         .oauth2ResourceServer(
             rs ->
                 rs.jwt(j -> j.jwtAuthenticationConverter(jwtAuthConverter))
-                    // Resource-server sets its own entry point + handler by default; we
-                    // override both to emit our ErrorResponse JSON shape.
                     .authenticationEntryPoint(authenticationEntryPoint)
                     .accessDeniedHandler(accessDeniedHandler))
         .exceptionHandling(
@@ -96,7 +83,6 @@ public class SecurityConfig {
     return http.build();
   }
 
-  // 401 — caller is anonymous or sent an invalid/expired/missing bearer token.
   @Bean
   public AuthenticationEntryPoint authenticationEntryPoint(ObjectMapper objectMapper) {
     return (request, response, ex) ->
@@ -108,9 +94,6 @@ public class SecurityConfig {
             "Authentication is required to access this resource");
   }
 
-  // 403 — caller is authenticated, but their authorities don't satisfy @PreAuthorize.
-  // Distinct from LoanNotPermittedException (service-layer 403); both end up as 403 JSON
-  // with the same envelope shape, just thrown from different layers.
   @Bean
   public AccessDeniedHandler accessDeniedHandler(ObjectMapper objectMapper) {
     return (request, response, ex) ->
@@ -134,8 +117,6 @@ public class SecurityConfig {
     objectMapper.writeValue(response.getWriter(), ErrorResponse.of(status, error, message));
   }
 
-  // HS256 keypair-of-one. Same key signs (encoder) and verifies (decoder).
-  // Wrapped as a Nimbus JWK so NimbusJwtEncoder can pick the signing key by algorithm.
   private OctetSequenceKey jwk() {
     return new OctetSequenceKey.Builder(new SecretKeySpec(secretBytes, "HmacSHA256"))
         .keyID("library-hs256")
@@ -156,9 +137,6 @@ public class SecurityConfig {
         .build();
   }
 
-  // Maps the JWT's `role` claim ("MEMBER" / "STAFF") to a Spring `ROLE_<value>` authority,
-  // so `@PreAuthorize("hasRole('STAFF')")` works downstream. Default converter reads
-  // `scope`/`scp` claims — we don't use scopes, so we wire an explicit converter.
   @Bean
   public JwtAuthenticationConverter jwtAuthenticationConverter() {
     JwtAuthenticationConverter converter = new JwtAuthenticationConverter();

@@ -34,7 +34,6 @@ public class AuthService {
     this.jwtDecoder = jwtDecoder;
   }
 
-  // Self-signup is members-only. Staff role is provisioned out-of-band (SQL insert).
   @Transactional
   public TokenPair signup(AuthDto.SignupRequest request) {
     userRepository
@@ -55,7 +54,6 @@ public class AuthService {
   }
 
   public TokenPair login(AuthDto.LoginRequest request) {
-    // Identical exception either way so callers can't probe email existence by status.
     UserEntity user =
         userRepository.findByEmail(request.email()).orElseThrow(InvalidCredentialsException::new);
     if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
@@ -90,9 +88,6 @@ public class AuthService {
     return issue(user);
   }
 
-  // No state to clean up: tokens are self-contained JWTs. Logout is the client discarding
-  // them. Endpoint exists so the API surface is symmetric with signup/login/refresh and so
-  // a future revocation list (JTI denylist) can be wired without changing the contract.
   public void logout() {
     log.debug("logout (client-side discard, no server state)");
   }
@@ -101,8 +96,5 @@ public class AuthService {
     return new TokenPair(jwtService.issueAccessToken(user), jwtService.issueRefreshToken(user));
   }
 
-  // Service-internal carrier — Controller maps it into AuthDto.TokenResponse with the
-  // token_type / expires_in fields. Keeping it out of AuthDto keeps the wire contract
-  // decoupled from the service shape.
   public record TokenPair(String access, String refresh) {}
 }

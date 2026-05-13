@@ -16,9 +16,6 @@ import java.util.List;
 
 public interface BookDto {
 
-  // Used by POST (create). ISBN is required and immutable — only settable at creation time.
-  // count uses @PositiveOrZero (allowing 0) because the "must be > 0" rule was scoped to
-  // updates; a fresh book with no copies is a legitimate creation state.
   record WriteRequest(
       @NotBlank
           @Pattern(
@@ -28,20 +25,13 @@ public interface BookDto {
       @NotBlank @Size(min = 1, max = 1000) String title,
       @NotNull @PositiveOrZero @Max(100_000) Integer count) {}
 
-  // Used by PUT (full replace of mutable fields). count must be > 0 (@Positive); the
-  // additional "count >= active loans" check is dynamic and lives in the service.
   record UpdateRequest(
       @NotBlank @Size(min = 1, max = 1000) String title,
       @NotNull @Positive @Max(100_000) Integer count) {}
 
-  // Used by PATCH — every field is optional. Constraints fire only when the value is
-  // present. count, when present, must be > 0 (@Positive is null-tolerant).
   record PatchRequest(
       @Size(min = 1, max = 1000) String title, @Positive @Max(100_000) Integer count) {}
 
-  // Outbound response shape. count = total inventory; available_count = inventory minus
-  // active (un-returned, not soft-deleted) loans. created_at / updated_at are audit
-  // metadata; deleted_at stays internal.
   record Response(
       Long id,
       String isbn,
@@ -51,9 +41,6 @@ public interface BookDto {
       @JsonProperty("created_at") Instant createdAt,
       @JsonProperty("updated_at") Instant updatedAt) {}
 
-  // Root-key envelopes. Every request/response wraps its payload under "book" / "books"
-  // so the wire format is self-describing and stays stable as we add sibling fields later.
-  // @Valid on the inner field cascades Bean Validation into the wrapped DTO.
   record WriteEnvelope(@Valid @NotNull WriteRequest book) {}
 
   record UpdateEnvelope(@Valid @NotNull UpdateRequest book) {}
@@ -64,7 +51,6 @@ public interface BookDto {
 
   record ListEnvelope(List<Response> books, Meta meta) {}
 
-  // Pagination meta. next_page / prev_page are omitted when there is no neighbor.
   @JsonInclude(Include.NON_NULL)
   record Meta(
       long total,

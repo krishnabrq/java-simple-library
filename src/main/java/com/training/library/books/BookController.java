@@ -46,9 +46,6 @@ public class BookController {
     return new BookDto.ResponseEnvelope(mapper.toResponse(service.findById(bookId)));
   }
 
-  // Mutations are STAFF-only. Authenticated MEMBER hits these → AccessDeniedException →
-  // 403 via the AccessDeniedHandler configured in SecurityConfig. GETs are intentionally
-  // unannotated — any authenticated user can read.
   @PostMapping
   @PreAuthorize("hasRole('STAFF')")
   @ResponseStatus(HttpStatus.CREATED)

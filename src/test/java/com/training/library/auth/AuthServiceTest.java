@@ -79,7 +79,6 @@ class AuthServiceTest {
     assertThat(saved.getName()).isEqualTo("Alice");
     assertThat(saved.getEmail()).isEqualTo("a@e.test");
     assertThat(saved.getPasswordHash()).isEqualTo("HASHED");
-    // Self-signup is members-only — staff can't get in through this path.
     assertThat(saved.getRole()).isEqualTo(UserRole.MEMBER);
   }
 
@@ -210,7 +209,6 @@ class AuthServiceTest {
   @DisplayName("logout - no-op (no state)")
   void logout_isNoOp() {
     service.logout();
-    // No interactions with repos / encoders / jwt services.
     verify(userRepository, never()).save(any());
     verify(jwtService, never()).issueAccessToken(any());
   }

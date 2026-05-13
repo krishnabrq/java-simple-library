@@ -37,7 +37,6 @@ class LoanControllerTest {
 
   @BeforeEach
   void setUp() {
-    // Child rows first — FKs.
     loanRepository.deleteAll();
     bookRepository.deleteAll();
     userRepository.deleteAll();
@@ -136,7 +135,6 @@ class LoanControllerTest {
   void borrow_noCopies_returns409() throws Exception {
     UserEntity member = seedUser("m@e.test", UserRole.MEMBER);
     BookEntity book = seedBook("9780000000001", 1);
-    // Pre-existing active loan consumes the only copy.
     seedActiveLoan(book, member);
 
     String body =

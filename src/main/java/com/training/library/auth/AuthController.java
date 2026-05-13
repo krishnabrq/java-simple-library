@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
 
-  // Cached at construction so we don't ask JwtService for it on every request.
   private static final String BEARER = "Bearer";
 
   private final AuthService authService;

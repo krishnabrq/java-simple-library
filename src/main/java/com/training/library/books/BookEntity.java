@@ -19,8 +19,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "books")
-// SQLDelete intercepts repository.delete*: instead of DELETE, run UPDATE on deleted_at.
-// SQLRestriction is appended to every load/find/JPQL select so soft-deleted rows are invisible.
 @SQLDelete(sql = "UPDATE books SET deleted_at = NOW() WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
 public class BookEntity {
@@ -29,9 +27,6 @@ public class BookEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  // ISBN-10 (10 chars) or ISBN-13 (13 chars), digits with optional trailing 'X' on ISBN-10.
-  // Partial unique index (active rows only) lives in src/main/resources/import.sql — JPA
-  // can't express WHERE clauses on indexes.
   @NotBlank
   @Pattern(regexp = "^(\\d{9}[\\dX]|\\d{13})$", message = "must be a valid ISBN-10 or ISBN-13")
   @Column(nullable = false, length = 13)

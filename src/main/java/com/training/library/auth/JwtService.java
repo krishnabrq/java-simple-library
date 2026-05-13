@@ -11,9 +11,6 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
-// Issues HS256-signed access + refresh tokens. The two share a shape; only `type` and TTL
-// differ. The `type` claim lets endpoints reject a refresh token presented as an access
-// token (and vice versa) without bookkeeping in the DB.
 @Service
 public class JwtService {
 
@@ -44,7 +41,6 @@ public class JwtService {
     return issue(user, TYPE_REFRESH, refreshTtl);
   }
 
-  // Exposed for the `expires_in` field in TokenResponse — OAuth2 convention is seconds.
   public long accessTtlSeconds() {
     return accessTtl.toSeconds();
   }

@@ -2,33 +2,33 @@
 
 .DEFAULT_GOAL := help
 
-help: ## List available targets
+help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-build: ## Compile, run tests, assemble jar
+build:
 	./gradlew build
 
-run: ## Boot the app — http://localhost:8080
+run:
 	./gradlew bootRun
 
-test: ## Run tests only
+test:
 	./gradlew test
 
-clean: ## Delete build outputs (build/, .gradle caches)
+clean:
 	./gradlew clean
 
-compile: ## Compile main sources only (skip tests)
+compile:
 	./gradlew compileJava
 
-watch: ## Auto-recompile on file changes (pairs with `make run` in another terminal)
+watch:
 	./gradlew compileJava --continuous
 
-deps: ## Print runtime dependency tree
+deps:
 	./gradlew dependencies --configuration runtimeClasspath
 
-format: ## Auto-format Java sources (Spotless + google-java-format)
+format:
 	./gradlew spotlessApply
 
-format-check: ## Verify formatting without modifying files (CI-style)
+format-check:
 	./gradlew spotlessCheck

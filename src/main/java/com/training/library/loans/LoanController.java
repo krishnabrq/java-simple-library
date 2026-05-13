@@ -41,9 +41,6 @@ public class LoanController {
     return new LoanDto.ListEnvelope(mapper.toListResponses(result.getContent()), meta);
   }
 
-  // No @PreAuthorize: the MEMBER-only rule is enforced by LoanService against the live
-  // DB role, not the (potentially stale) JWT claim. Anyone authenticated reaches the
-  // service, which then rejects STAFF with a 403.
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public LoanDto.ResponseEnvelope borrow(
@@ -60,8 +57,6 @@ public class LoanController {
   }
 
   private static Long subjectAsUserId(Jwt jwt) {
-    // JwtService writes sub as user.id.toString(); any drift here means we minted a token
-    // we can't read back — surface as a parse error rather than a silent NPE downstream.
     return Long.valueOf(jwt.getSubject());
   }
 }

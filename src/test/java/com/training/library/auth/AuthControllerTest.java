@@ -67,7 +67,6 @@ class AuthControllerTest {
 
     UserEntity saved = userRepository.findByEmail("alice@example.test").orElseThrow();
     assertThat(saved.getRole()).isEqualTo(UserRole.MEMBER);
-    // Hash, not plaintext — bcrypt output starts with $2.
     assertThat(saved.getPasswordHash()).startsWith("$2");
     assertThat(passwordEncoder.matches("hunter2hunter2", saved.getPasswordHash())).isTrue();
   }
@@ -223,7 +222,6 @@ class AuthControllerTest {
 
     JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
     String accessToken = json.get("tokens").get("access_token").asText();
-    // JWT body is the middle segment, base64url-encoded JSON.
     String payload =
         new String(
             java.util.Base64.getUrlDecoder().decode(accessToken.split("\\.")[1]),

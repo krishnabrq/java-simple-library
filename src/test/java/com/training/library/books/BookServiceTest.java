@@ -113,7 +113,6 @@ class BookServiceTest {
     assertThat(result.activeLoanCount()).isZero();
     verify(mapper).toEntity(request);
     verify(repository).save(mappedEntity);
-    // No loan lookup on create — a brand-new book can't have loans.
     verify(loanRepository, never()).countByBookIdAndReturnedAtIsNull(1L);
   }
 

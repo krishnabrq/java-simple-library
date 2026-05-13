@@ -20,7 +20,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "book_loans")
-// Soft delete: even loan history is preserved via deleted_at instead of physical removal.
 @SQLDelete(sql = "UPDATE book_loans SET deleted_at = NOW() WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
 public class BookLoanEntity {
@@ -29,27 +28,20 @@ public class BookLoanEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  // LAZY: the join only fires when book/user is dereferenced. Cheap list queries.
-  // No cascade — lifecycle of book and user is independent of any loan row.
   @NotNull
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "book_id", nullable = false)
   private BookEntity book;
 
-  // FK points at UserEntity (the merged staffs+members table). The "only MEMBER role can
-  // borrow" rule is enforced at the service layer when creating a loan — not in the FK.
   @NotNull
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "user_id", nullable = false)
   private UserEntity user;
 
-  // Physical borrow moment. Distinct from created_at (which is when the row was written) so
-  // back-dated loans can be recorded later. Service is responsible for setting this on create.
   @NotNull
   @Column(name = "borrowed_at", nullable = false)
   private Instant borrowedAt;
 
-  // Null while the book is out; set when returned.
   @Column(name = "returned_at")
   private Instant returnedAt;
 

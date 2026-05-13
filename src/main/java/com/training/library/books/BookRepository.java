@@ -9,11 +9,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface BookRepository extends JpaRepository<BookEntity, Long> {
 
-  // Single-query availability for listing. LEFT JOIN keeps books with zero loans; the ON
-  // predicate filters to active loans (returned_at IS NULL, deleted_at IS NULL — kept
-  // explicit even though @SQLRestriction on BookLoanEntity also enforces it). The class
-  // projection (`SELECT new BookView(...)`) lets Spring Data hydrate a typed page. The
-  // explicit countQuery prevents Spring Data from trying to derive one from the GROUP BY.
   @Query(
       value =
           """

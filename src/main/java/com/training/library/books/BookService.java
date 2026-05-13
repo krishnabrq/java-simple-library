@@ -25,8 +25,6 @@ public class BookService {
     this.mapper = mapper;
   }
 
-  // Page is 1-based at the API edge; Spring Data is 0-based internally, so subtract here.
-  // findAllWithAvailability fuses books + active-loan count into one SQL round trip.
   public Page<BookView> findAll(int page, int limit) {
     log.debug("listing books page={} limit={}", page, limit);
     return repository.findAllWithAvailability(PageRequest.of(page - 1, limit));
@@ -43,7 +41,6 @@ public class BookService {
   public BookView create(BookDto.WriteRequest request) {
     BookEntity saved = repository.save(mapper.toEntity(request));
     log.info("created book id={} title='{}'", saved.getId(), saved.getTitle());
-    // A new book can't have any loans yet — skip the count query.
     return new BookView(saved, 0L);
   }
 
@@ -81,7 +78,6 @@ public class BookService {
       throw new BookConflictException(
           "Cannot delete book " + bookId + ": " + active + " active loan(s) outstanding");
     }
-    // Soft delete: BookEntity's @SQLDelete rewrites this to UPDATE deleted_at.
     repository.deleteById(bookId);
     log.info("deleted book id={}", bookId);
   }

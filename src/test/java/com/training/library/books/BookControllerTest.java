@@ -30,14 +30,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
-// addFilters=false skips the entire security chain for this test — BookControllerTest
-// covers the books domain (CRUD, validation, count guards), not authentication. The
-// auth/JWT path is exercised by AuthControllerTest and LoanControllerTest with real
-// tokens. @WithMockUser DOES work here because filters are off: there's no
-// SecurityContextHolderFilter to overwrite the per-thread context the test listener sets.
-// STAFF role lets every mutation past @PreAuthorize; GET endpoints don't care about role.
-// Role-boundary behavior (MEMBER denied on mutations, etc.) is covered by
-// BookControllerSecurityTest.
 @AutoConfigureMockMvc(addFilters = false)
 @WithMockUser(roles = "STAFF")
 class BookControllerTest {
@@ -54,11 +46,6 @@ class BookControllerTest {
 
   @BeforeEach
   void setUp() {
-    // Order matters for FK constraints. All three repos use @SQLDelete, so deleteAll()
-    // just stamps deleted_at — rows remain in the DB but @SQLRestriction hides them, and
-    // partial unique indexes (WHERE deleted_at IS NULL) ignore them. ddl-auto=create-drop
-    // on the test DB recreates schema between test runs, so zombie rows don't accumulate
-    // across `./gradlew test` invocations.
     loanRepository.deleteAll();
     bookRepository.deleteAll();
     userRepository.deleteAll();
@@ -76,7 +63,6 @@ class BookControllerTest {
     UserEntity u = new UserEntity();
     u.setName(name);
     u.setEmail(email);
-    // Plaintext placeholder until Phase B's bcrypt encoder lands.
     u.setPasswordHash("placeholder-not-a-real-hash");
     u.setRole(UserRole.MEMBER);
     return u;
@@ -132,7 +118,6 @@ class BookControllerTest {
     UserEntity m = userRepository.save(member("Alice", "alice@example.test"));
     Instant now = Instant.now();
 
-    // 2 still out, 1 already returned.
     loanRepository.save(loan(b, m, now.minus(1, ChronoUnit.DAYS), null));
     loanRepository.save(loan(b, m, now.minus(2, ChronoUnit.DAYS), null));
     loanRepository.save(loan(b, m, now.minus(7, ChronoUnit.DAYS), now.minus(1, ChronoUnit.DAYS)));
@@ -384,7 +369,6 @@ class BookControllerTest {
         .andExpect(jsonPath("$.status").value(409))
         .andExpect(jsonPath("$.error").value("Conflict"));
 
-    // Count must not have changed.
     assertThat(bookRepository.findById(b.getId()).orElseThrow().getCount()).isEqualTo(5);
   }
 
@@ -468,7 +452,6 @@ class BookControllerTest {
 
     mockMvc.perform(delete("/api/v1/books/" + saved.getId())).andExpect(status().isNoContent());
 
-    // findById goes through @SQLRestriction("deleted_at IS NULL") — soft-deleted row is invisible.
     assertThat(bookRepository.findById(saved.getId())).isEmpty();
 
     mockMvc.perform(get("/api/v1/books/" + saved.getId())).andExpect(status().isNotFound());
@@ -487,7 +470,6 @@ class BookControllerTest {
         .andExpect(jsonPath("$.status").value(409))
         .andExpect(jsonPath("$.error").value("Conflict"));
 
-    // Book must still be findable.
     assertThat(bookRepository.findById(b.getId())).isPresent();
   }
 
@@ -510,7 +492,6 @@ class BookControllerTest {
     mockMvc.perform(delete("/api/v1/books/999")).andExpect(status().isNotFound());
   }
 
-  // 13-digit ISBN seed (978 + 9-digit zero-padded counter + check-digit placeholder '0').
   private static String isbnSeed(int n) {
     return String.format("978%010d", n);
   }

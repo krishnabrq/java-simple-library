@@ -53,9 +53,6 @@ class JwtServiceTest {
     u.setEmail(email);
     u.setPasswordHash("not-real");
     u.setRole(role);
-    // UserEntity has no setId by design (id is DB-assigned). Reflection here keeps the
-    // production entity free of a footgun setter while letting this unit test exercise the
-    // id-dependent `sub` claim without booting the JPA / persistence stack.
     ReflectionTestUtils.setField(u, "id", id);
     return u;
   }
@@ -73,10 +70,7 @@ class JwtServiceTest {
     assertThat(jwt.getClaimAsString(JwtService.CLAIM_ROLE)).isEqualTo("MEMBER");
     assertThat(jwt.getClaimAsString(JwtService.CLAIM_EMAIL)).isEqualTo("alice@e.test");
     assertThat(jwt.getSubject()).isEqualTo("42");
-    // Use getClaimAsString — Jwt.getIssuer() parses to a URL and returns null for non-URI
-    // issuers like "library".
     assertThat(jwt.getClaimAsString("iss")).isEqualTo("library");
-    // Slack on either side for clock + JWT encoder overhead.
     assertThat(jwt.getExpiresAt())
         .isBetween(before.plus(ACCESS_TTL).minusSeconds(2), Instant.now().plus(ACCESS_TTL));
   }
