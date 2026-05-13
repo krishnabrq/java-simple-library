@@ -54,8 +54,8 @@ class AuthControllerTest {
   void signup_happyPath_returns201WithTokens() throws Exception {
     String body =
         """
-        {"signup":{"name":"Alice","email":"alice@example.test","password":"hunter2hunter2"}}
-        """;
+                {"signup":{"name":"Alice","email":"alice@example.test","password":"hunter2hunter2"}}
+                """;
 
     mockMvc
         .perform(post("/api/v1/auth/signup").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -78,8 +78,8 @@ class AuthControllerTest {
 
     String body =
         """
-        {"signup":{"name":"Other","email":"dup@example.test","password":"differentpw"}}
-        """;
+                {"signup":{"name":"Other","email":"dup@example.test","password":"differentpw"}}
+                """;
 
     mockMvc
         .perform(post("/api/v1/auth/signup").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -93,8 +93,8 @@ class AuthControllerTest {
   void signup_shortPassword_returns400() throws Exception {
     String body =
         """
-        {"signup":{"name":"Bob","email":"bob@example.test","password":"short"}}
-        """;
+                {"signup":{"name":"Bob","email":"bob@example.test","password":"short"}}
+                """;
 
     mockMvc
         .perform(post("/api/v1/auth/signup").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -108,8 +108,8 @@ class AuthControllerTest {
 
     String body =
         """
-        {"login":{"email":"staff@example.test","password":"staffpassword"}}
-        """;
+                {"login":{"email":"staff@example.test","password":"staffpassword"}}
+                """;
 
     mockMvc
         .perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -125,8 +125,8 @@ class AuthControllerTest {
 
     String body =
         """
-        {"login":{"email":"u@example.test","password":"wrongpassword"}}
-        """;
+                {"login":{"email":"u@example.test","password":"wrongpassword"}}
+                """;
 
     mockMvc
         .perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -139,8 +139,8 @@ class AuthControllerTest {
   void login_unknownEmail_returns401() throws Exception {
     String body =
         """
-        {"login":{"email":"nobody@example.test","password":"whatever1"}}
-        """;
+                {"login":{"email":"nobody@example.test","password":"whatever1"}}
+                """;
 
     mockMvc
         .perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -155,8 +155,8 @@ class AuthControllerTest {
 
     String body =
         """
-        {"refresh":{"refresh_token":"%s"}}
-        """
+                {"refresh":{"refresh_token":"%s"}}
+                """
             .formatted(refreshToken);
 
     mockMvc
@@ -174,8 +174,8 @@ class AuthControllerTest {
 
     String body =
         """
-        {"refresh":{"refresh_token":"%s"}}
-        """
+                {"refresh":{"refresh_token":"%s"}}
+                """
             .formatted(accessToken);
 
     mockMvc
@@ -189,8 +189,8 @@ class AuthControllerTest {
   void refresh_garbageToken_returns401() throws Exception {
     String body =
         """
-        {"refresh":{"refresh_token":"not-a-jwt"}}
-        """;
+                {"refresh":{"refresh_token":"not-a-jwt"}}
+                """;
 
     mockMvc
         .perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -210,8 +210,8 @@ class AuthControllerTest {
 
     String body =
         """
-        {"login":{"email":"claims@example.test","password":"claimspassword"}}
-        """;
+                {"login":{"email":"claims@example.test","password":"claimspassword"}}
+                """;
 
     MvcResult result =
         mockMvc
@@ -221,14 +221,14 @@ class AuthControllerTest {
             .andReturn();
 
     JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-    String accessToken = json.get("tokens").get("access_token").asText();
+    String accessToken = json.get("tokens").get("access_token").asString();
     String payload =
         new String(
             java.util.Base64.getUrlDecoder().decode(accessToken.split("\\.")[1]),
             java.nio.charset.StandardCharsets.UTF_8);
     JsonNode claims = objectMapper.readTree(payload);
-    assertThat(claims.get("role").asText()).isEqualTo("STAFF");
-    assertThat(claims.get("email").asText()).isEqualTo("claims@example.test");
-    assertThat(claims.get("type").asText()).isEqualTo("access");
+    assertThat(claims.get("role").asString()).isEqualTo("STAFF");
+    assertThat(claims.get("email").asString()).isEqualTo("claims@example.test");
+    assertThat(claims.get("type").asString()).isEqualTo("access");
   }
 }
