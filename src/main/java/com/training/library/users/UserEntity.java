@@ -1,13 +1,16 @@
-package com.training.library.members;
+package com.training.library.users;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import org.hibernate.annotations.CreationTimestamp;
@@ -15,12 +18,16 @@ import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.UpdateTimestamp;
 
+// Unified principal for both library members and staff. Role distinguishes them at the
+// authorization layer (Spring Security) rather than the schema layer — auth/login/refresh/
+// logout flows are identical for both, so one table avoids duplicating that machinery.
+// Public so other features (loans/) can reference it via @ManyToOne.
 @Entity
-@Table(name = "members")
-// Soft delete: DELETE is rewritten to flip deleted_at; SELECTs filter out tombstones.
-@SQLDelete(sql = "UPDATE members SET deleted_at = NOW() WHERE id = ?")
+@Table(name = "users")
+// Soft delete: rows persist with deleted_at set; @SQLRestriction filters every read.
+@SQLDelete(sql = "UPDATE users SET deleted_at = NOW() WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
-public class MemberEntity {
+public class UserEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -38,12 +45,19 @@ public class MemberEntity {
   @Column(nullable = false, length = 255)
   private String email;
 
-  // NOTE: column is named `password_hash` to record the intent. Until BCrypt lands
-  // (see PROGRESS.md "Deferred gaps"), writes to this column will be plaintext.
+  // bcrypt output (60-char "$2a$..." form). Until Phase B's encoder lands, callers may
+  // still write plaintext through this column — documented at the call site.
   @NotBlank
   @Size(min = 1, max = 255)
   @Column(name = "password_hash", nullable = false, length = 255)
   private String passwordHash;
+
+  // Stored as the enum's name (string) — readable in the DB, stable across reordering of
+  // the enum's constants. EnumType.ORDINAL silently shifts meanings if order ever changes.
+  @NotNull
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 16)
+  private UserRole role;
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
@@ -56,7 +70,7 @@ public class MemberEntity {
   @Column(name = "deleted_at")
   private Instant deletedAt;
 
-  public MemberEntity() {}
+  public UserEntity() {}
 
   public Long getId() {
     return id;
@@ -72,6 +86,10 @@ public class MemberEntity {
 
   public String getPasswordHash() {
     return passwordHash;
+  }
+
+  public UserRole getRole() {
+    return role;
   }
 
   public Instant getCreatedAt() {
@@ -96,5 +114,9 @@ public class MemberEntity {
 
   public void setPasswordHash(String passwordHash) {
     this.passwordHash = passwordHash;
+  }
+
+  public void setRole(UserRole role) {
+    this.role = role;
   }
 }

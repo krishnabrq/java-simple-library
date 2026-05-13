@@ -9,6 +9,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.training.library.loans.BookLoanEntity;
+import com.training.library.loans.BookLoanRepository;
+import com.training.library.users.UserEntity;
+import com.training.library.users.UserRepository;
+import com.training.library.users.UserRole;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,11 +25,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+// addFilters=false skips the entire security chain for this test — BookControllerTest
+// covers the books domain (CRUD, validation, count guards), not authentication. The
+// auth/JWT path is exercised by AuthControllerTest and LoanControllerTest with real
+// tokens. @WithMockUser DOES work here because filters are off: there's no
+// SecurityContextHolderFilter to overwrite the per-thread context the test listener sets.
+// STAFF role lets every mutation past @PreAuthorize; GET endpoints don't care about role.
+// Role-boundary behavior (MEMBER denied on mutations, etc.) is covered by
+// BookControllerSecurityTest.
+@AutoConfigureMockMvc(addFilters = false)
+@WithMockUser(roles = "STAFF")
 class BookControllerTest {
 
   @Autowired private MockMvc mockMvc;
@@ -31,9 +48,20 @@ class BookControllerTest {
 
   @Autowired private BookRepository bookRepository;
 
+  @Autowired private BookLoanRepository loanRepository;
+
+  @Autowired private UserRepository userRepository;
+
   @BeforeEach
   void setUp() {
+    // Order matters for FK constraints. All three repos use @SQLDelete, so deleteAll()
+    // just stamps deleted_at — rows remain in the DB but @SQLRestriction hides them, and
+    // partial unique indexes (WHERE deleted_at IS NULL) ignore them. ddl-auto=create-drop
+    // on the test DB recreates schema between test runs, so zombie rows don't accumulate
+    // across `./gradlew test` invocations.
+    loanRepository.deleteAll();
     bookRepository.deleteAll();
+    userRepository.deleteAll();
   }
 
   private BookEntity book(String isbn, String title, int count) {
@@ -42,6 +70,25 @@ class BookControllerTest {
     b.setTitle(title);
     b.setCount(count);
     return b;
+  }
+
+  private UserEntity member(String name, String email) {
+    UserEntity u = new UserEntity();
+    u.setName(name);
+    u.setEmail(email);
+    // Plaintext placeholder until Phase B's bcrypt encoder lands.
+    u.setPasswordHash("placeholder-not-a-real-hash");
+    u.setRole(UserRole.MEMBER);
+    return u;
+  }
+
+  private BookLoanEntity loan(BookEntity b, UserEntity u, Instant borrowedAt, Instant returnedAt) {
+    BookLoanEntity l = new BookLoanEntity();
+    l.setBook(b);
+    l.setUser(u);
+    l.setBorrowedAt(borrowedAt);
+    l.setReturnedAt(returnedAt);
+    return l;
   }
 
   @Test
@@ -69,10 +116,32 @@ class BookControllerTest {
         .andExpect(jsonPath("$.books.length()").value(2))
         .andExpect(jsonPath("$.books[0].title").value("Book 1"))
         .andExpect(jsonPath("$.books[0].isbn").value("9780000000001"))
+        .andExpect(jsonPath("$.books[0].count").value(10))
+        .andExpect(jsonPath("$.books[0].available_count").value(10))
         .andExpect(jsonPath("$.books[0].created_at").exists())
         .andExpect(jsonPath("$.books[0].updated_at").exists())
         .andExpect(jsonPath("$.books[1].title").value("Book 2"))
+        .andExpect(jsonPath("$.books[1].available_count").value(5))
         .andExpect(jsonPath("$.meta.total").value(2));
+  }
+
+  @Test
+  @DisplayName("GET /api/v1/books - available_count subtracts only un-returned loans")
+  void getBooks_availableCountIgnoresReturnedLoans() throws Exception {
+    BookEntity b = bookRepository.save(book("9780000000010", "Mixed Loans", 5));
+    UserEntity m = userRepository.save(member("Alice", "alice@example.test"));
+    Instant now = Instant.now();
+
+    // 2 still out, 1 already returned.
+    loanRepository.save(loan(b, m, now.minus(1, ChronoUnit.DAYS), null));
+    loanRepository.save(loan(b, m, now.minus(2, ChronoUnit.DAYS), null));
+    loanRepository.save(loan(b, m, now.minus(7, ChronoUnit.DAYS), now.minus(1, ChronoUnit.DAYS)));
+
+    mockMvc
+        .perform(get("/api/v1/books"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.books[0].count").value(5))
+        .andExpect(jsonPath("$.books[0].available_count").value(3));
   }
 
   @Test
@@ -129,7 +198,7 @@ class BookControllerTest {
   }
 
   @Test
-  @DisplayName("GET /api/v1/books/{id} - returns book under 'book' root when exists")
+  @DisplayName("GET /api/v1/books/{id} - returns book with available_count=count when no loans")
   void getBook_whenExists_returnsBook() throws Exception {
     BookEntity saved = bookRepository.save(book("9780261103252", "The Hobbit", 10));
 
@@ -140,8 +209,26 @@ class BookControllerTest {
         .andExpect(jsonPath("$.book.isbn").value("9780261103252"))
         .andExpect(jsonPath("$.book.title").value("The Hobbit"))
         .andExpect(jsonPath("$.book.count").value(10))
+        .andExpect(jsonPath("$.book.available_count").value(10))
         .andExpect(jsonPath("$.book.created_at").exists())
         .andExpect(jsonPath("$.book.updated_at").exists());
+  }
+
+  @Test
+  @DisplayName("GET /api/v1/books/{id} - available_count drops by each active loan")
+  void getBook_subtractsActiveLoans() throws Exception {
+    BookEntity b = bookRepository.save(book("9780261103252", "The Hobbit", 5));
+    UserEntity m = userRepository.save(member("Bob", "bob@example.test"));
+    Instant now = Instant.now();
+
+    loanRepository.save(loan(b, m, now.minus(1, ChronoUnit.HOURS), null));
+    loanRepository.save(loan(b, m, now.minus(2, ChronoUnit.HOURS), null));
+
+    mockMvc
+        .perform(get("/api/v1/books/" + b.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.book.count").value(5))
+        .andExpect(jsonPath("$.book.available_count").value(3));
   }
 
   @Test
@@ -165,7 +252,8 @@ class BookControllerTest {
         .andExpect(jsonPath("$.book.id").isNumber())
         .andExpect(jsonPath("$.book.isbn").value("9780261103252"))
         .andExpect(jsonPath("$.book.title").value("The Hobbit"))
-        .andExpect(jsonPath("$.book.count").value(10));
+        .andExpect(jsonPath("$.book.count").value(10))
+        .andExpect(jsonPath("$.book.available_count").value(10));
 
     assertThat(bookRepository.findAll()).hasSize(1);
     BookEntity savedEntity = bookRepository.findAll().get(0);
@@ -252,12 +340,52 @@ class BookControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.book.isbn").value("9780261103252"))
         .andExpect(jsonPath("$.book.title").value("New Title"))
-        .andExpect(jsonPath("$.book.count").value(20));
+        .andExpect(jsonPath("$.book.count").value(20))
+        .andExpect(jsonPath("$.book.available_count").value(20));
 
     BookEntity updated = bookRepository.findById(saved.getId()).orElseThrow();
     assertThat(updated.getIsbn()).isEqualTo("9780261103252");
     assertThat(updated.getTitle()).isEqualTo("New Title");
     assertThat(updated.getCount()).isEqualTo(20);
+  }
+
+  @Test
+  @DisplayName("PUT /api/v1/books/{id} - returns 400 when count is 0 (must be > 0)")
+  void replaceBook_zeroCount_returns400() throws Exception {
+    BookEntity saved = bookRepository.save(book("9780261103252", "T", 5));
+
+    BookDto.UpdateEnvelope envelope =
+        new BookDto.UpdateEnvelope(new BookDto.UpdateRequest("Whatever", 0));
+
+    mockMvc
+        .perform(
+            put("/api/v1/books/" + saved.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(envelope)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("PUT /api/v1/books/{id} - returns 409 when new count below active loans")
+  void replaceBook_belowActiveLoans_returns409() throws Exception {
+    BookEntity b = bookRepository.save(book("9780261103252", "T", 5));
+    UserEntity m = userRepository.save(member("Carol", "carol@example.test"));
+    loanRepository.save(loan(b, m, Instant.now(), null));
+    loanRepository.save(loan(b, m, Instant.now(), null));
+
+    BookDto.UpdateEnvelope envelope = new BookDto.UpdateEnvelope(new BookDto.UpdateRequest("T", 1));
+
+    mockMvc
+        .perform(
+            put("/api/v1/books/" + b.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(envelope)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.status").value(409))
+        .andExpect(jsonPath("$.error").value("Conflict"));
+
+    // Count must not have changed.
+    assertThat(bookRepository.findById(b.getId()).orElseThrow().getCount()).isEqualTo(5);
   }
 
   @Test
@@ -288,11 +416,49 @@ class BookControllerTest {
                 .content(objectMapper.writeValueAsString(envelope)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.book.title").value("Original Title"))
-        .andExpect(jsonPath("$.book.count").value(15));
+        .andExpect(jsonPath("$.book.count").value(15))
+        .andExpect(jsonPath("$.book.available_count").value(15));
 
     BookEntity updated = bookRepository.findById(saved.getId()).orElseThrow();
     assertThat(updated.getTitle()).isEqualTo("Original Title");
     assertThat(updated.getCount()).isEqualTo(15);
+  }
+
+  @Test
+  @DisplayName("PATCH /api/v1/books/{id} - returns 400 when count is 0 (must be > 0)")
+  void patchBook_zeroCount_returns400() throws Exception {
+    BookEntity saved = bookRepository.save(book("9780261103252", "T", 5));
+
+    BookDto.PatchEnvelope envelope = new BookDto.PatchEnvelope(new BookDto.PatchRequest(null, 0));
+
+    mockMvc
+        .perform(
+            patch("/api/v1/books/" + saved.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(envelope)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("PATCH /api/v1/books/{id} - returns 409 when new count below active loans")
+  void patchBook_belowActiveLoans_returns409() throws Exception {
+    BookEntity b = bookRepository.save(book("9780261103252", "T", 5));
+    UserEntity m = userRepository.save(member("Dan", "dan@example.test"));
+    loanRepository.save(loan(b, m, Instant.now(), null));
+    loanRepository.save(loan(b, m, Instant.now(), null));
+    loanRepository.save(loan(b, m, Instant.now(), null));
+
+    BookDto.PatchEnvelope envelope = new BookDto.PatchEnvelope(new BookDto.PatchRequest(null, 2));
+
+    mockMvc
+        .perform(
+            patch("/api/v1/books/" + b.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(envelope)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.status").value(409));
+
+    assertThat(bookRepository.findById(b.getId()).orElseThrow().getCount()).isEqualTo(5);
   }
 
   @Test
@@ -306,6 +472,36 @@ class BookControllerTest {
     assertThat(bookRepository.findById(saved.getId())).isEmpty();
 
     mockMvc.perform(get("/api/v1/books/" + saved.getId())).andExpect(status().isNotFound());
+  }
+
+  @Test
+  @DisplayName("DELETE /api/v1/books/{id} - returns 409 when active loans outstanding")
+  void deleteBook_withActiveLoan_returns409() throws Exception {
+    BookEntity b = bookRepository.save(book("9780261103252", "On loan", 5));
+    UserEntity m = userRepository.save(member("Eve", "eve@example.test"));
+    loanRepository.save(loan(b, m, Instant.now(), null));
+
+    mockMvc
+        .perform(delete("/api/v1/books/" + b.getId()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.status").value(409))
+        .andExpect(jsonPath("$.error").value("Conflict"));
+
+    // Book must still be findable.
+    assertThat(bookRepository.findById(b.getId())).isPresent();
+  }
+
+  @Test
+  @DisplayName("DELETE /api/v1/books/{id} - succeeds when all loans returned")
+  void deleteBook_allLoansReturned_returns204() throws Exception {
+    BookEntity b = bookRepository.save(book("9780261103252", "All back", 5));
+    UserEntity m = userRepository.save(member("Faye", "faye@example.test"));
+    Instant now = Instant.now();
+    loanRepository.save(loan(b, m, now.minus(7, ChronoUnit.DAYS), now.minus(1, ChronoUnit.DAYS)));
+
+    mockMvc.perform(delete("/api/v1/books/" + b.getId())).andExpect(status().isNoContent());
+
+    assertThat(bookRepository.findById(b.getId())).isEmpty();
   }
 
   @Test

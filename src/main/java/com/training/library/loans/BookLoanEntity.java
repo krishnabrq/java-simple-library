@@ -1,7 +1,7 @@
 package com.training.library.loans;
 
 import com.training.library.books.BookEntity;
-import com.training.library.members.MemberEntity;
+import com.training.library.users.UserEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -23,24 +23,25 @@ import org.hibernate.annotations.UpdateTimestamp;
 // Soft delete: even loan history is preserved via deleted_at instead of physical removal.
 @SQLDelete(sql = "UPDATE book_loans SET deleted_at = NOW() WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
-class BookLoanEntity {
+public class BookLoanEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  // LAZY: the join only fires when book/member is dereferenced. Cheap list queries.
-  // No cascade — lifecycle of book and member is independent of any loan row.
+  // LAZY: the join only fires when book/user is dereferenced. Cheap list queries.
+  // No cascade — lifecycle of book and user is independent of any loan row.
   @NotNull
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "book_id", nullable = false)
   private BookEntity book;
 
-  // Only members borrow (staff cannot) — column named after the relationship, not the role.
+  // FK points at UserEntity (the merged staffs+members table). The "only MEMBER role can
+  // borrow" rule is enforced at the service layer when creating a loan — not in the FK.
   @NotNull
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
-  @JoinColumn(name = "member_id", nullable = false)
-  private MemberEntity member;
+  @JoinColumn(name = "user_id", nullable = false)
+  private UserEntity user;
 
   // Physical borrow moment. Distinct from created_at (which is when the row was written) so
   // back-dated loans can be recorded later. Service is responsible for setting this on create.
@@ -73,8 +74,8 @@ class BookLoanEntity {
     return book;
   }
 
-  public MemberEntity getMember() {
-    return member;
+  public UserEntity getUser() {
+    return user;
   }
 
   public Instant getBorrowedAt() {
@@ -101,8 +102,8 @@ class BookLoanEntity {
     this.book = book;
   }
 
-  public void setMember(MemberEntity member) {
-    this.member = member;
+  public void setUser(UserEntity user) {
+    this.user = user;
   }
 
   public void setBorrowedAt(Instant borrowedAt) {

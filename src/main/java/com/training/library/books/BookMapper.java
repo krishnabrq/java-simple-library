@@ -10,9 +10,25 @@ import org.mapstruct.NullValuePropertyMappingStrategy;
 @Mapper(componentModel = "spring")
 public interface BookMapper {
 
-  BookDto.Response toResponse(BookEntity entity);
+  // BookView → Response. availableCount is computed as count - activeLoanCount.
+  // Done as a default method so the arithmetic stays in one place — MapStruct expressions
+  // are awkward to read and break easily when fields move around.
+  default BookDto.Response toResponse(BookView view) {
+    BookEntity b = view.book();
+    int active = view.activeLoanCount() == null ? 0 : view.activeLoanCount().intValue();
+    return new BookDto.Response(
+        b.getId(),
+        b.getIsbn(),
+        b.getTitle(),
+        b.getCount(),
+        b.getCount() - active,
+        b.getCreatedAt(),
+        b.getUpdatedAt());
+  }
 
-  List<BookDto.Response> toResponses(List<BookEntity> entities);
+  default List<BookDto.Response> toResponses(List<BookView> views) {
+    return views.stream().map(this::toResponse).toList();
+  }
 
   // POST: build a new entity from the request. Id and audit columns are DB-assigned.
   @Mapping(target = "id", ignore = true)

@@ -1,6 +1,13 @@
 package com.training.library.common;
 
+import com.training.library.auth.EmailAlreadyExistsException;
+import com.training.library.auth.InvalidCredentialsException;
+import com.training.library.auth.InvalidTokenException;
+import com.training.library.books.BookConflictException;
 import com.training.library.books.BookNotFoundException;
+import com.training.library.loans.LoanConflictException;
+import com.training.library.loans.LoanNotFoundException;
+import com.training.library.loans.LoanNotPermittedException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +31,58 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ErrorResponse> handleBookNotFound(BookNotFoundException ex) {
     log.debug("404 book not found: {}", ex.getMessage());
     return notFound(ex.getMessage());
+  }
+
+  // 409 — book mutation conflicts with current state (e.g. delete-with-active-loans,
+  // count-below-active-loans)
+  @ExceptionHandler(BookConflictException.class)
+  public ResponseEntity<ErrorResponse> handleBookConflict(BookConflictException ex) {
+    log.debug("409 book conflict: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ErrorResponse.of(409, "Conflict", ex.getMessage()));
+  }
+
+  // 409 — signup hit an existing active user with the same email
+  @ExceptionHandler(EmailAlreadyExistsException.class)
+  public ResponseEntity<ErrorResponse> handleEmailExists(EmailAlreadyExistsException ex) {
+    log.debug("409 email exists: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ErrorResponse.of(409, "Conflict", ex.getMessage()));
+  }
+
+  // 401 — login or refresh authentication failed. Message intentionally generic for
+  // InvalidCredentialsException so we don't leak whether an email exists.
+  @ExceptionHandler({InvalidCredentialsException.class, InvalidTokenException.class})
+  public ResponseEntity<ErrorResponse> handleAuthFailure(RuntimeException ex) {
+    log.debug("401 auth failure: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .body(ErrorResponse.of(401, "Unauthorized", ex.getMessage()));
+  }
+
+  // 404 — loan id missing or belongs to a different user (we deliberately conflate the
+  // two to avoid disclosing other members' loans).
+  @ExceptionHandler(LoanNotFoundException.class)
+  public ResponseEntity<ErrorResponse> handleLoanNotFound(LoanNotFoundException ex) {
+    log.debug("404 loan not found: {}", ex.getMessage());
+    return notFound(ex.getMessage());
+  }
+
+  // 409 — borrow without available copies, or return of already-returned loan
+  @ExceptionHandler(LoanConflictException.class)
+  public ResponseEntity<ErrorResponse> handleLoanConflict(LoanConflictException ex) {
+    log.debug("409 loan conflict: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ErrorResponse.of(409, "Conflict", ex.getMessage()));
+  }
+
+  // 403 — authenticated, but caller's live role can't perform this action (e.g. STAFF
+  // tries to borrow). Distinct from Spring Security's AccessDeniedException, which fires
+  // from @PreAuthorize and is handled by the AccessDeniedHandler in SecurityConfig.
+  @ExceptionHandler(LoanNotPermittedException.class)
+  public ResponseEntity<ErrorResponse> handleLoanForbidden(LoanNotPermittedException ex) {
+    log.debug("403 loan not permitted: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        .body(ErrorResponse.of(403, "Forbidden", ex.getMessage()));
   }
 
   // 404 — route not found (catches unmatched URLs, replaces Whitelabel page)

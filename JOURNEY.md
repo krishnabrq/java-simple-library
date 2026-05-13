@@ -44,7 +44,7 @@ Concept-keyed reference of what's been learned and decided. Not chronological. E
   - `[.properties]` — extension hint; tells Spring to parse the file as Java `.properties` format (KEY=VALUE) even though it has no `.properties` suffix.
 - **Property-source precedence (high → low)**: command-line args > JVM system props > OS env vars > imported config files (`.env`) > `application.properties`. So `DB_NAME=library_test ./gradlew test` overrides whatever's in `.env` without editing it.
 - `.env` format is plain `.properties`: no quoting, no `$VAR` shell expansion, no `export`. Special chars (`@`, `:`) are literal.
-- Test isolation rule of thumb: things that *vary by deployment* (host, credentials, log level) → `.env`. Things that are *test invariants* (`ddl-auto=create-drop`, `show-sql=false`) → hardcoded in `src/test/resources/application.properties`. DB name straddles the line — kept as an env var here so the developer explicitly opts into the test DB, but at the cost of footgun risk (running tests with the dev `DB_NAME` will wipe dev data via `bookRepository.deleteAll()`).
+- Test isolation rule of thumb: things that _vary by deployment_ (host, credentials, log level) → `.env`. Things that are _test invariants_ (`ddl-auto=create-drop`, `show-sql=false`) → hardcoded in `src/test/resources/application.properties`. DB name straddles the line — kept as an env var here so the developer explicitly opts into the test DB, but at the cost of footgun risk (running tests with the dev `DB_NAME` will wipe dev data via `bookRepository.deleteAll()`).
 - `.env` is gitignored; `.env.example` (same keys, sample values) is committed so the schema of expected env vars is discoverable.
 
 ## Soft deletes (Hibernate `@SQLDelete` + `@SQLRestriction`)
@@ -58,10 +58,10 @@ Concept-keyed reference of what's been learned and decided. Not chronological. E
 
 ## Partial unique indexes (Postgres)
 
-- A *partial* unique index applies the uniqueness rule only to rows matching a `WHERE` predicate. Standard SQL doesn't have it; Postgres does: `CREATE UNIQUE INDEX ... ON tbl (col) WHERE predicate`.
-- Why it matters with soft deletes: a full unique index on `email` would block a user from re-registering after their previous account was soft-deleted. A partial index (`WHERE deleted_at IS NULL`) only enforces uniqueness against *active* rows.
+- A _partial_ unique index applies the uniqueness rule only to rows matching a `WHERE` predicate. Standard SQL doesn't have it; Postgres does: `CREATE UNIQUE INDEX ... ON tbl (col) WHERE predicate`.
+- Why it matters with soft deletes: a full unique index on `email` would block a user from re-registering after their previous account was soft-deleted. A partial index (`WHERE deleted_at IS NULL`) only enforces uniqueness against _active_ rows.
 - JPA can't express it: `@UniqueConstraint` and `@Index` accept column lists only, no predicate. Three workarounds:
-  - `src/main/resources/import.sql` — runs after Hibernate's schema generation on every boot. Use `IF NOT EXISTS` for idempotency. *Chosen for now.*
+  - `src/main/resources/import.sql` — runs after Hibernate's schema generation on every boot. Use `IF NOT EXISTS` for idempotency. _Chosen for now._
   - Flyway/Liquibase migrations — versioned, repeatable, the "right" answer for production.
   - Native query in a `@PostConstruct` hook — works but couples app startup to DDL.
 
@@ -169,13 +169,13 @@ Handlers registered:
 
 `BookMapper` methods:
 
-| Method                                                            | Use           | Notes                                                                                      |
-| ----------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------ |
-| `toResponse(BookEntity)`                                          | GET response  |                                                                                            |
-| `toResponses(List<BookEntity>)`                                   | list response | auto-delegates to `toResponse` per item                                                    |
-| `toEntity(WriteRequest)`                                          | POST          | `@Mapping(target="id", ignore=true)` — DB owns id                                          |
-| `updateFromWriteRequest(@MappingTarget BookEntity, WriteRequest)` | PUT           | full overwrite, id preserved                                                               |
-| `updatePatch(@MappingTarget BookEntity, PatchRequest)`            | PATCH         | `@BeanMapping(nullValuePropertyMappingStrategy = IGNORE)` — null fields leave target alone |
+| Method                                                              | Use           | Notes                                                                                      |
+| ------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------ |
+| `toResponse(BookView)`                                              | GET response  | `default` method; computes `available_count = count − activeLoanCount`                     |
+| `toResponses(List<BookView>)`                                       | list response | `default` method; delegates to `toResponse(BookView)` per item                             |
+| `toEntity(WriteRequest)`                                            | POST          | `@Mapping(target="id", ignore=true)` — DB owns id                                          |
+| `updateFromUpdateRequest(@MappingTarget BookEntity, UpdateRequest)` | PUT           | full overwrite of mutable fields; isbn / id / audit stay as-is on loaded entity            |
+| `updatePatch(@MappingTarget BookEntity, PatchRequest)`              | PATCH         | `@BeanMapping(nullValuePropertyMappingStrategy = IGNORE)` — null fields leave target alone |
 
 When to add MapStruct: copy-pasted the same mapping 3 times, or entity has many fields. Skip for 1–2 field DTOs.
 
@@ -278,6 +278,100 @@ Project workflow:
 - Implementation: nested record envelopes in `BookDto` (`WriteEnvelope`, `PatchEnvelope`, `ResponseEnvelope`, `ListEnvelope`). Controller accepts/returns envelopes; service stays unaware of the wire shape.
 - `@Valid @NotNull` on the envelope's inner field is the trick: `@NotNull` rejects `{}` / `{"book": null}`; `@Valid` cascades Bean Validation into the wrapped DTO so `WriteRequest` constraints still fire. Field-error paths report `book.title` instead of `title` — accurate to the wire shape.
 - Snake_case JSON keys (`next_page`) on camelCase Java fields (`nextPage`) via `@JsonProperty("next_page")` from `com.fasterxml.jackson.annotation`. Per-field annotation chosen over a global `PropertyNamingStrategy` to keep the rest of the API explicit.
+
+## RBAC: where the role check actually lives
+
+- Two layers can enforce a role: `@PreAuthorize("hasRole('X')")` at the HTTP boundary (reads the JWT's authorities, throws `AccessDeniedException` → 403), and a service-layer guard that loads the user from the DB and checks the live role.
+- Books mutations use `@PreAuthorize` only. JWT-authority is fine here: a STAFF user demoted to MEMBER mid-token-lifetime would briefly retain write access until their token expires (≤15 min). Acceptable for a learning project; real prod would use short access TTLs + a revocation list.
+- Loan endpoints use service-layer enforcement (per project preference) — `LoanService.requireMember(...)` consults `userRepository.findById(...).getRole()` against the live DB. Catches the demotion case immediately, and keeps the rule visible at the layer that owns the domain ("only members can borrow"). The endpoints are still gated to `authenticated()` by the global filter chain.
+- Two different exceptions, both 403:
+  - Spring Security's `AccessDeniedException` (from `@PreAuthorize` failure) → handled by `SecurityConfig.accessDeniedHandler`.
+  - `LoanNotPermittedException` (service throws it) → handled by `GlobalExceptionHandler`.
+    Both render the same `ErrorResponse` JSON shape, so callers can't tell which layer rejected them.
+- Identity in the controller: `@AuthenticationPrincipal Jwt jwt` injects the parsed token. `jwt.getSubject()` returns the user id as a string (that's what `JwtService.issue(...)` writes into `sub`). The controller parses to `Long` and hands off to the service; the service does the DB look-up.
+
+## Mapping security failures to JSON
+
+- Resource-server's default 401 is empty body + `WWW-Authenticate: Bearer error="invalid_token"` header. Default 403 is also empty. Two overrides bring them into our envelope:
+  - `AuthenticationEntryPoint` (called when the chain rejects an unauthenticated request) → write `{"status":401, "error":"Unauthorized", ...}` via `ObjectMapper`.
+  - `AccessDeniedHandler` (called when an authenticated request fails authority check) → write `{"status":403, "error":"Forbidden", ...}`.
+- Both are configured twice: once on `oauth2ResourceServer.jwt(...).authenticationEntryPoint(...)` and once on `exceptionHandling(...)`. The first covers token-related rejections (caught by the JWT filter); the second covers post-authentication rejections (from `AuthorizationFilter` and `@PreAuthorize`).
+- `ErrorResponse` is intentionally tiny (4 fields, no FieldErrors list for security failures) — security errors don't have field-level detail to surface.
+
+## Borrow + return: state-machine in two endpoints
+
+- `POST /api/v1/loans` body is just `{book_id}`. The caller is identified by the JWT — never trust the client to say who they are. Service inserts `borrowed_at = NOW()`, `returned_at = NULL`.
+- `PATCH /api/v1/loans/{id}/return` has no body. Service flips `returned_at` from `NULL` to `NOW()`. Double-return is rejected with 409.
+- "Loan belongs to another member" returns the same 404 as "loan doesn't exist". Refusing to disclose membership of other users' loans is cheap and aligns with the "don't leak existence" pattern from auth login.
+- Availability check (`active < book.count`) is not atomic with the loan insert — two concurrent borrows can race. Documented inline. Real fix is `SELECT ... FOR UPDATE` on the book row (`@Lock(LockModeType.PESSIMISTIC_WRITE)` on a derived query) or a database-level constraint that counts active loans. Out of scope for this project.
+
+## Auth flow: signup / login / refresh / logout
+
+- Endpoints mounted at `/api/v1/auth/**` (permitted in `SecurityConfig`). `AuthController` is thin — DTO unwrap, call `AuthService`, wrap the `TokenPair` into a wire `TokenResponse` with `token_type=Bearer` and `expires_in` (seconds).
+- Signup is members-only. The endpoint hardcodes `UserRole.MEMBER`; staff accounts are seeded out-of-band (manual SQL) so the public API surface can't elevate privilege. `password` field is bcrypt-hashed via `PasswordEncoder.encode(...)` before save.
+- Login: `findByEmail` → `passwordEncoder.matches(rawPassword, hash)`. Both "unknown email" and "wrong password" paths throw the same exception with the same message ("Invalid email or password") — refuses to leak email existence via response differences.
+- Refresh: decode the presented token with `JwtDecoder` (validates signature + expiry in one call), check the `type` claim equals `refresh` (so an access token can't be replayed against this endpoint), look up the user by `sub`, re-issue both tokens. Stateless — no DB-side refresh table for now; logout is a client-discards-tokens operation. Adding a JTI denylist later would make real revocation possible without changing this contract.
+- Logout: returns 204, body empty. Pure no-op today. Documented intent — endpoint exists so the wire contract is symmetric and a future revocation list slots in without breaking clients.
+- Error mapping (all in `GlobalExceptionHandler`):
+  - `EmailAlreadyExistsException` → 409 Conflict.
+  - `InvalidCredentialsException`, `InvalidTokenException` → 401 Unauthorized. One handler covers both via the `{}` form on `@ExceptionHandler`.
+- Testing the auth flow: `@SpringBootTest` with the full security chain on (no `addFilters=false`) because `/api/v1/auth/**` is publicly permitted — no Bearer header needed. The "issued access token carries role and email claims" test decodes the JWT body by base64url'ing the middle segment and asserts on the parsed JSON — verifies the claim contract without coupling to Nimbus internals.
+
+## Spring Security: stateless JWT bearer auth
+
+- Two starters do most of the work: `spring-boot-starter-security` (filter chain, encoders, `@PreAuthorize`) and `spring-boot-starter-oauth2-resource-server` (`NimbusJwtDecoder` / `NimbusJwtEncoder` plus the `BearerTokenAuthenticationFilter` that pulls a Bearer token off the request and turns it into an `Authentication`).
+- The "resource server" framing is OAuth2 vocabulary: a service that validates a token someone else issued. We're doing both — issuing AND validating — but using the resource-server filter for inbound auth keeps the chain off-the-shelf.
+- Single HS256 secret signs and verifies. Wrapped as a Nimbus `OctetSequenceKey` for the encoder, as a raw `SecretKeySpec` for the decoder. Loaded from `${JWT_SECRET}` with no default — startup fails fast if it's missing, surfacing config errors immediately rather than at the first request.
+- `SecurityFilterChain` shape:
+  - `csrf().disable()` — stateless API, no session cookies, so the CSRF token machinery has nothing to protect.
+  - `sessionCreationPolicy(STATELESS)` — Spring Security creates no `HttpSession` and never tries to read one.
+  - `authorizeHttpRequests`: `/api/v1/auth/**` and `/error` are public; everything else `authenticated()`.
+  - `oauth2ResourceServer.jwt(...)` — wires the JWT filter.
+- `JwtAuthenticationConverter` is what links our `role` claim to Spring's `hasRole(...)` checks. Default converter looks at `scope` / `scp` claims (OAuth2 scopes). We override it: read the `role` claim ("MEMBER"/"STAFF") and emit a single `SimpleGrantedAuthority("ROLE_" + role)`. The `ROLE_` prefix is what `hasRole("STAFF")` strips and compares against.
+- `@EnableMethodSecurity` turns on `@PreAuthorize` / `@PostAuthorize` for Phase D. Without it, those annotations are silently no-ops.
+- Tokens carry `iss=library`, `sub=user.id`, `iat`, `exp`, plus `email`, `role`, and `type` (`access` | `refresh`). `type` lets endpoints reject a refresh token presented at an access-protected route (and vice versa) without DB lookups.
+
+## `@WithMockUser` vs the resource-server filter chain
+
+- `@WithMockUser` is the textbook way to authenticate a MockMvc test: a `TestExecutionListener` populates the per-thread `SecurityContextHolder` before the test method runs.
+- Doesn't work cleanly with the OAuth2 resource-server chain. `SecurityContextHolderFilter` (early in the chain) calls `SecurityContextRepository.loadDeferredContext(request)` and then **overwrites** the per-thread context with whatever the repository returned. Default repository for stateless apps returns an empty context, so the mock user is wiped before `AuthorizationFilter` checks authorities — the request is treated as anonymous and the resource-server's entry point sends a 401 with `WWW-Authenticate: Bearer ...`.
+- Two ways out:
+  - **`@AutoConfigureMockMvc(addFilters = false)`** — skip the entire security chain for tests that exercise domain behavior, not security. Used for `BookControllerTest`.
+  - **`SecurityMockMvcRequestPostProcessors.jwt()`** — per-request, injects a fake `Jwt` directly into the request so the resource-server filter authenticates against it. The right choice for tests that need to assert role-based behavior (Phase D).
+- Lesson: `@WithMockUser` only works when the filter chain trusts `SecurityContextHolder`. Resource-server trusts the request, not the holder.
+
+## Identity tables: one `users` over two role tables
+
+- Started with `staffs` and `members` as separate tables (identical column shape, FK from `book_loans` pointing at `members` specifically). Merged into a single `users` table with a `role` enum column (`MEMBER` | `STAFF`).
+- Driver: auth/login/refresh/logout flows are byte-for-byte identical for both roles. Two tables forces two of every auth class — repository, service, controller, password encoder wiring. One table keeps the surface honest.
+- Trade: the FK-level guarantee that a loan only references a member is gone. `book_loans.user_id` now points at any user. The "only MEMBER can borrow" rule moves to the service layer (and Spring Security `@PreAuthorize`). Defense-in-depth becomes a single-line authorization check.
+- Email uniqueness: collapsed from two partial indexes (one per old table) to one (`users_email_active_uidx`). Same email can no longer exist as both a staff and a member — almost certainly the desired behavior.
+- `EnumType.STRING` over `EnumType.ORDINAL`: the constant's _name_ goes in the DB. Survives reordering the enum's declarations. ORDINAL writes 0, 1, 2 — silently shifts meaning if anyone moves the constants.
+- Schema migration: Hibernate's `ddl-auto=update` will _add_ the `users` table and the `user_id` column on `book_loans`, but it doesn't drop the old `staffs` / `members` tables or the old `member_id` column. For a dev sandbox the cleanest move is `dropdb library && createdb library` and let Hibernate recreate from scratch. Tests run on `ddl-auto=create-drop`, so they're already hermetic — no manual step.
+
+## Avoiding N+1 with JPQL constructor projection
+
+- "Show the active-loan count for every book in the list" is the canonical N+1 setup: one SELECT for books, then one COUNT per book. The fix is a single query that left-joins loans and groups by book.
+- JPQL supports it cleanly: `LEFT JOIN BookLoanEntity l ON l.book = b AND l.returnedAt IS NULL AND l.deletedAt IS NULL`. The explicit `ON` predicate (JPA 2.1+) is what makes it work — putting the loan filters in a `WHERE` clause would drop books with zero active loans, since the join produces no rows for them and `WHERE` evaluates after the join.
+- Returning the joined shape via a constructor projection: `SELECT new com.training.library.books.BookView(b, COUNT(l)) ... GROUP BY b`. `BookView` is a record (`record BookView(BookEntity book, Long activeLoanCount)`) — Spring Data finds the matching ctor by FQN and hydrates a typed `Page<BookView>` directly. Beats `Object[]` rows or a separate `@SqlResultSetMapping`.
+- `LEFT JOIN` (not inner): books with zero loans still appear with `COUNT(l) = 0`. `@SQLRestriction` on `BookLoanEntity` already filters soft-deleted loans uniformly, but keeping the predicates explicit in the JPQL `ON` is defensive — if someone later removes `@SQLRestriction`, the query still does the right thing.
+- Paginated `GROUP BY` needs an explicit `countQuery`. Spring Data tries to derive a count query by stripping the `SELECT` from the original; with `GROUP BY` that derivation either fails or returns the post-group row count (one per group), not the total entity count. Set `countQuery = "SELECT COUNT(b) FROM BookEntity b"` on `@Query` to short-circuit it.
+- Service / mapper / DTO each see `BookView` instead of `BookEntity`. The mapper's `toResponse(BookView)` subtracts `activeLoanCount` from `count` once, in a `default` method — keeps the arithmetic in one place instead of scattered across controller assemblers.
+
+## State-conflict guards (409 vs 400)
+
+- Two flavours of "invalid count" need different statuses:
+  - **Static** ("count must be > 0"): expressible as Bean Validation on the DTO field (`@Positive` on `UpdateRequest.count` / `PatchRequest.count`). Validation runs before the controller body, fails with `MethodArgumentNotValidException` → 400 via the existing handler. No service-layer code.
+  - **Dynamic** ("count must be ≥ currently borrowed copies", "can't delete with active loans"): depends on persisted state, so it lives in the service. Service throws a domain exception (`BookConflictException`); `@RestControllerAdvice` maps it to 409.
+- Reusing the existing 4xx-as-domain-exception pattern keeps controllers HTTP-status-free. The new handler is one method.
+- Tests prove the split: PUT/PATCH with `count=0` returns 400 with a `book.count` field error; PUT/PATCH with `count=1` when 5 loans are active returns 409 with the conflict message.
+- `WriteRequest.count` stays `@PositiveOrZero` — the "> 0" rule was explicitly scoped to updates. A fresh book with zero copies is a legitimate POST state.
+
+## Soft delete + integration test isolation
+
+- `@SQLDelete` rewrites `repository.delete*()` into `UPDATE deleted_at = NOW()`. Rows physically remain. `@SQLRestriction` hides them from every read, so within a test the row is "gone" — but it's still in the table.
+- Consequence for `@BeforeEach { repo.deleteAll(); }`: after N tests, the table holds N tombstones. Partial unique indexes (`WHERE deleted_at IS NULL`) ignore them, so re-inserting the same ISBN/email keeps working. `ddl-auto=create-drop` on the test DB recreates schema between `./gradlew test` invocations, so zombie rows don't pile up across runs.
+- Order of `deleteAll()` calls matters for FKs: children before parents (`loanRepository.deleteAll()` before `bookRepository.deleteAll()` / `memberRepository.deleteAll()`). FK constraints reference rows by id; soft-deleted rows still exist, so the constraint stays satisfied — but during the soft-delete itself, the loan row needs to exist before its parents are touched.
 
 ## Testing
 

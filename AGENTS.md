@@ -33,15 +33,34 @@ com.training.library/
 │   ├── BookService.java             # logic + transactions
 │   ├── BookRepository.java          # Spring Data JPA interface
 │   ├── BookEntity.java              # @Entity
+│   ├── BookView.java                # projection record (entity + activeLoanCount)
 │   ├── BookDto.java                 # nested records: WriteRequest, UpdateRequest, PatchRequest, Response
 │   ├── BookMapper.java              # MapStruct
+│   ├── BookConflictException.java   # 409 (delete-with-loans, count-below-loans)
 │   └── BookNotFoundException.java
-├── staffs/                          # feature package — entity only (no CRUD yet)
-│   └── StaffEntity.java             # @Entity
-├── members/                         # feature package — entity only (no CRUD yet)
-│   └── MemberEntity.java            # @Entity
-├── loans/                           # feature package — entity only (no CRUD yet)
-│   └── BookLoanEntity.java          # @Entity (FKs to BookEntity + MemberEntity)
+├── users/                           # feature package — entity only (no CRUD yet)
+│   ├── UserEntity.java              # @Entity — unified principal (role discriminates member vs staff)
+│   ├── UserRepository.java
+│   └── UserRole.java                # MEMBER | STAFF
+├── loans/                           # feature package — borrow + return endpoints
+│   ├── BookLoanEntity.java          # @Entity (FKs to BookEntity + UserEntity)
+│   ├── BookLoanRepository.java      # countByBookIdAndReturnedAtIsNull (used by BookService)
+│   ├── LoanController.java          # /api/v1/loans (borrow) + /{id}/return
+│   ├── LoanService.java             # MEMBER-only enforced against live DB role
+│   ├── LoanDto.java                 # BorrowRequest, Response + envelopes
+│   ├── LoanMapper.java              # MapStruct (id-only projection of nested FKs)
+│   ├── LoanNotFoundException.java   # 404 (also for "not your loan")
+│   ├── LoanConflictException.java   # 409 (no copies, double-return)
+│   └── LoanNotPermittedException.java  # 403 (STAFF trying to borrow/return)
+├── auth/                            # feature package — security plumbing + endpoints
+│   ├── SecurityConfig.java          # SecurityFilterChain + BCrypt + JWT encoder/decoder beans
+│   ├── JwtService.java              # mints access + refresh tokens (HS256)
+│   ├── AuthController.java          # /api/v1/auth/{signup,login,refresh,logout}
+│   ├── AuthService.java             # signup/login/refresh logic, hashes passwords
+│   ├── AuthDto.java                 # SignupRequest, LoginRequest, RefreshRequest, TokenResponse + envelopes
+│   ├── EmailAlreadyExistsException.java
+│   ├── InvalidCredentialsException.java
+│   └── InvalidTokenException.java
 └── common/                          # cross-cutting
 	├── GlobalExceptionHandler.java  # @RestControllerAdvice
 	└── ErrorResponse.java
