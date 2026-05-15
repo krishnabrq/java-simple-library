@@ -1,10 +1,12 @@
 package com.training.library.auth;
 
+import com.training.library.notifications.UserSignedUpEvent;
 import com.training.library.users.UserEntity;
 import com.training.library.users.UserRepository;
 import com.training.library.users.UserRole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -22,16 +24,19 @@ public class AuthService {
   private final PasswordEncoder passwordEncoder;
   private final JwtService jwtService;
   private final JwtDecoder jwtDecoder;
+  private final ApplicationEventPublisher eventPublisher;
 
   public AuthService(
       UserRepository userRepository,
       PasswordEncoder passwordEncoder,
       JwtService jwtService,
-      JwtDecoder jwtDecoder) {
+      JwtDecoder jwtDecoder,
+      ApplicationEventPublisher eventPublisher) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtService = jwtService;
     this.jwtDecoder = jwtDecoder;
+    this.eventPublisher = eventPublisher;
   }
 
   @Transactional
@@ -50,6 +55,8 @@ public class AuthService {
     user.setRole(UserRole.MEMBER);
     UserEntity saved = userRepository.save(user);
     log.info("signup ok id={} role={}", saved.getId(), saved.getRole());
+    eventPublisher.publishEvent(
+        new UserSignedUpEvent(saved.getId(), saved.getName(), saved.getEmail()));
     return issue(saved);
   }
 

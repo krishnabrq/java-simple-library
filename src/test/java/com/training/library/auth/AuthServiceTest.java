@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.training.library.notifications.UserSignedUpEvent;
 import com.training.library.users.UserEntity;
 import com.training.library.users.UserRepository;
 import com.training.library.users.UserRole;
@@ -19,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -34,6 +36,8 @@ class AuthServiceTest {
   @Mock private JwtService jwtService;
 
   @Mock private JwtDecoder jwtDecoder;
+
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   @InjectMocks private AuthService service;
 
@@ -80,6 +84,13 @@ class AuthServiceTest {
     assertThat(saved.getEmail()).isEqualTo("a@e.test");
     assertThat(saved.getPasswordHash()).isEqualTo("HASHED");
     assertThat(saved.getRole()).isEqualTo(UserRole.MEMBER);
+
+    ArgumentCaptor<UserSignedUpEvent> eventCaptor =
+        ArgumentCaptor.forClass(UserSignedUpEvent.class);
+    verify(eventPublisher).publishEvent(eventCaptor.capture());
+    UserSignedUpEvent event = eventCaptor.getValue();
+    assertThat(event.name()).isEqualTo("Alice");
+    assertThat(event.email()).isEqualTo("a@e.test");
   }
 
   @Test
@@ -96,6 +107,7 @@ class AuthServiceTest {
     verify(passwordEncoder, never()).encode(any());
     verify(userRepository, never()).save(any());
     verify(jwtService, never()).issueAccessToken(any());
+    verify(eventPublisher, never()).publishEvent(any());
   }
 
   @Test

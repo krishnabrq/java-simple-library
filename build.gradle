@@ -36,9 +36,20 @@ java {
 	}
 }
 
+ext {
+	set('springCloudVersion', '2025.0.0')
+	set('resilience4jVersion', '2.2.0')
+}
+
 repositories {
 	gradlePluginPortal()
 	mavenCentral()
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+	}
 }
 
 dependencies {
@@ -47,6 +58,10 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+	// Declarative HTTP client. Interface in, HTTP requests out.
+	implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+	// @Retry, @CircuitBreaker annotation support. Pulls spring-aop transitively.
+	implementation "io.github.resilience4j:resilience4j-spring-boot3:${resilience4jVersion}"
 	implementation 'org.mapstruct:mapstruct:1.6.3'
 	annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
