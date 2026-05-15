@@ -1,19 +1,29 @@
+// Liquibase Gradle plugin 3.x needs liquibase-core on the build's own classpath
+// (the plugin itself reads `liquibase.Scope` at apply-time, before `liquibaseRuntime`
+// is resolved). Adding it here resolves NoClassDefFoundError at config-time.
+buildscript {
+	repositories { mavenCentral() }
+	dependencies { classpath 'org.liquibase:liquibase-core:4.31.1' }
+}
+
 plugins {
 	id 'java'
 	id 'jacoco'
-	id 'org.springframework.boot' version '4.0.6'
+	id 'org.springframework.boot' version '3.5.7'
 	id 'io.spring.dependency-management' version '1.1.7'
-	id 'com.diffplug.spotless' version "8.4.0"
+	id 'com.diffplug.spotless' version "7.2.1"
+	id 'org.liquibase.gradle' version '3.1.0'
 }
 
 spotless {
 	java {
 		importOrder()
 		removeUnusedImports()
-		forbidWildcardImports()
-		forbidModuleImports()
 		cleanthat()
-		googleJavaFormat()
+		// Pin a google-java-format that parses Java 25 javac internals.
+		// Spotless 7.x bundles an older release that throws NoSuchMethodError
+		// against the JDK 25 com.sun.tools.javac.util.Log API.
+		googleJavaFormat('1.28.0')
 	}
 }
 
@@ -33,7 +43,7 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
@@ -41,8 +51,18 @@ dependencies {
 	annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	runtimeOnly 'org.postgresql:postgresql'
-	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	implementation 'org.liquibase:liquibase-core'
+	liquibaseRuntime 'org.liquibase:liquibase-core:4.31.1'
+	liquibaseRuntime 'org.postgresql:postgresql:42.7.4'
+	liquibaseRuntime 'org.yaml:snakeyaml:2.2'
+	liquibaseRuntime 'info.picocli:picocli:4.7.5'
+	// Hibernate-extension wiring for `diffChangelog` against JPA entities
+	// (the `make db-generate-migration` flow). Pulls in Spring/JPA so the
+	// hibernate:spring:<package> scheme can scan @Entity classes.
+	liquibaseRuntime 'org.liquibase.ext:liquibase-hibernate6:4.31.1'
+	liquibaseRuntime 'org.springframework.boot:spring-boot-starter-data-jpa:3.5.7'
+	liquibaseRuntime sourceSets.main.output
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
@@ -68,3 +88,58 @@ jacocoTestReport {
 		csv.required = false
 	}
 }
+
+// Liquibase plugin configuration — used by `./gradlew update`, `status`, etc.
+// Pulls connection details from the same env vars the Spring app uses, so the
+// CLI plugin and Spring runtime stay in sync.
+def dbHost = System.getenv('DB_HOST') ?: 'localhost'
+def dbPort = System.getenv('DB_PORT') ?: '5432'
+def dbName = System.getenv('DB_NAME') ?: 'library'
+def dbUser = System.getenv('DB_USER') ?: 'postgres'
+def dbPassword = System.getenv('DB_PASSWORD') ?: ''
+
+// Two activities so commands that use `changelogFile` as INPUT (update, status,
+// rollback) don't collide with commands that use it as OUTPUT (diffChangelog).
+// Switch via -PliquibaseRunList=diff at invocation; default is `main`.
+liquibase {
+	activities {
+		main {
+			changelogFile 'src/main/resources/db/changelog/db.changelog-master.yaml'
+			url "jdbc:postgresql://${dbHost}:${dbPort}/${dbName}"
+			username dbUser
+			// Skip the `password` arg when empty — the CLI plugin emits a bare
+			// `--password` token with no value, which the next arg gets parsed as.
+			if (dbPassword) {
+				password dbPassword
+			}
+			driver 'org.postgresql.Driver'
+			logLevel 'info'
+		}
+		diff {
+			// changelogFile here is the OUTPUT file for diffChangelog.
+			// Override per-invocation with -PoutputChangelog=<path>.
+			changelogFile project.findProperty('outputChangelog') ?: 'liquibase-diff-output.yaml'
+			url "jdbc:postgresql://${dbHost}:${dbPort}/${dbName}"
+			username dbUser
+			if (dbPassword) {
+				password dbPassword
+			}
+			driver 'org.postgresql.Driver'
+			// JPA entities as a virtual "reference" DB — diff emits changes
+			// needed to make `url` (live DB) match `referenceUrl` (entities).
+			referenceUrl 'hibernate:spring:com.training.library?dialect=org.hibernate.dialect.PostgreSQLDialect&hibernate.physical_naming_strategy=org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy'
+			// Align schema name across both sides so the diff doesn't flag
+			// `public.users` (live) vs `users` (hibernate-virtual) as different.
+			defaultSchemaName 'public'
+			referenceDefaultSchemaName 'public'
+			logLevel 'info'
+		}
+	}
+	runList = project.findProperty('liquibaseRunList') ?: 'main'
+}
+
+// Liquibase tasks that need the project's compiled @Entity classes must wait
+// for compileJava (the `liquibaseRuntime sourceSets.main.output` dep above
+// references build/classes, which doesn't exist until compileJava finishes).
+tasks.matching { it.name in ['diffChangelog', 'diff', 'generateChangelog', 'snapshot'] }
+		.configureEach { dependsOn 'compileJava' }

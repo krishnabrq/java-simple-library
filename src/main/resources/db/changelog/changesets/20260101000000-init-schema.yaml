@@ -1,0 +1,167 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1-init-schema-users
+      author: system
+      changes:
+        - createTable:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: password_hash
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: role
+                  type: varchar(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp(6) with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp(6) with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: deleted_at
+                  type: timestamp(6) with time zone
+
+  - changeSet:
+      id: 2-init-schema-books
+      author: system
+      changes:
+        - createTable:
+            tableName: books
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: isbn
+                  type: varchar(13)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: title
+                  type: varchar(1000)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: count
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp(6) with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp(6) with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: deleted_at
+                  type: timestamp(6) with time zone
+
+  - changeSet:
+      id: 3-init-schema-book-loans
+      author: system
+      changes:
+        - createTable:
+            tableName: book_loans
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: book_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: borrowed_at
+                  type: timestamp(6) with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: returned_at
+                  type: timestamp(6) with time zone
+              - column:
+                  name: created_at
+                  type: timestamp(6) with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp(6) with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: deleted_at
+                  type: timestamp(6) with time zone
+        - addForeignKeyConstraint:
+            baseTableName: book_loans
+            baseColumnNames: book_id
+            constraintName: fk_book_loans_book_id
+            referencedTableName: books
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: book_loans
+            baseColumnNames: user_id
+            constraintName: fk_book_loans_user_id
+            referencedTableName: users
+            referencedColumnNames: id
+
+  - changeSet:
+      id: 4-init-schema-partial-indexes
+      author: system
+      changes:
+        - sql:
+            sql: |
+              CREATE UNIQUE INDEX IF NOT EXISTS books_isbn_active_uidx
+                  ON books (isbn)
+                  WHERE deleted_at IS NULL;
+              CREATE UNIQUE INDEX IF NOT EXISTS users_email_active_uidx
+                  ON users (email)
+                  WHERE deleted_at IS NULL;
+      rollback:
+        - sql:
+            sql: |
+              DROP INDEX IF EXISTS books_isbn_active_uidx;
+              DROP INDEX IF EXISTS users_email_active_uidx;

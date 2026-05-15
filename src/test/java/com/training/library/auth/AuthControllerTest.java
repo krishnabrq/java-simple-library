@@ -5,6 +5,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.training.library.users.UserEntity;
 import com.training.library.users.UserRepository;
 import com.training.library.users.UserRole;
@@ -12,14 +14,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -221,14 +221,14 @@ class AuthControllerTest {
             .andReturn();
 
     JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-    String accessToken = json.get("tokens").get("access_token").asString();
+    String accessToken = json.get("tokens").get("access_token").asText();
     String payload =
         new String(
             java.util.Base64.getUrlDecoder().decode(accessToken.split("\\.")[1]),
             java.nio.charset.StandardCharsets.UTF_8);
     JsonNode claims = objectMapper.readTree(payload);
-    assertThat(claims.get("role").asString()).isEqualTo("STAFF");
-    assertThat(claims.get("email").asString()).isEqualTo("claims@example.test");
-    assertThat(claims.get("type").asString()).isEqualTo("access");
+    assertThat(claims.get("role").asText()).isEqualTo("STAFF");
+    assertThat(claims.get("email").asText()).isEqualTo("claims@example.test");
+    assertThat(claims.get("type").asText()).isEqualTo("access");
   }
 }
