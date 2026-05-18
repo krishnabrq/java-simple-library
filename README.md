@@ -359,3 +359,39 @@ Return a currently borrowed book. Requires `MEMBER` role.
   }
 }
 ```
+
+---
+
+## Notifications
+
+The application emits internal events on certain actions and dispatches outbound notifications to third-party services. These are side-effects, not part of the REST contract, but clients should be aware of them.
+
+### Welcome Notification (on Signup)
+
+When a new member successfully registers via `POST /api/v1/auth/signup`, the application publishes an internal `UserSignedUpEvent` and asynchronously calls an external notifier service to send a welcome message. The signup response is **not** blocked by this call.
+
+- **Trigger**: Successful signup (after the user is persisted)
+- **Internal event**: `UserSignedUpEvent { userId, name, email }` (Spring `ApplicationEvent`)
+- **Listener**: `WelcomeNotificationListener#onUserSignedUp` (runs on `@Async` thread)
+- **Outbound call**:
+  - **Method**: `POST`
+  - **Path**: `{app.welcome-notifier.base-url}/posts`
+  - **Default base URL**: `https://jsonplaceholder.typicode.com` (override with the `WELCOME_NOTIFIER_URL` env var or the `app.welcome-notifier.base-url` property)
+  - **Request Body**:
+
+  ```json
+  {
+    "userId": 42,
+    "title": "Welcome, Jane Doe",
+    "body": "Thanks for joining the library!"
+  }
+  ```
+
+#### Resilience
+
+The outbound call is wrapped with Resilience4j retry and circuit breaker, both registered under the instance name `welcomeNotifier`:
+
+- **Retry**: up to 3 attempts, 500 ms initial wait, exponential backoff (multiplier 2). Only retries transient remote errors (`feign.RetryableException`, `feign.FeignException$FeignServerException`); 4xx responses are not retried.
+- **Circuit breaker**: count-based sliding window of 10 calls, minimum 5 calls before evaluation, opens at a 50% failure rate, stays open for 30 s, then allows 3 probe calls in `HALF_OPEN`.
+- **HTTP timeouts**: 2000 ms connect, 3000 ms read.
+- **Fallback**: when retries are exhausted or the breaker is open, `WelcomeNotificationListener#onFailure` logs a warning. The signup itself is unaffected.
