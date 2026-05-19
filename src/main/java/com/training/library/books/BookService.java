@@ -30,6 +30,19 @@ public class BookService {
     return repository.findAllWithAvailability(PageRequest.of(page - 1, limit));
   }
 
+  public Page<BookView> search(BookSearchCriteria criteria) {
+    log.debug(
+        "searching books titleContains='{}' page={} limit={}",
+        criteria.getTitleContains(),
+        criteria.getPage(),
+        criteria.getLimit());
+    PageRequest pageRequest = PageRequest.of(criteria.getPage() - 1, criteria.getLimit());
+    if (criteria.hasTitleFilter()) {
+      return repository.findByTitleWithAvailability(criteria.normalizedTitleFilter(), pageRequest);
+    }
+    return repository.findAllWithAvailability(pageRequest);
+  }
+
   public BookView findById(Long bookId) {
     log.debug("looking up book id={}", bookId);
     return repository

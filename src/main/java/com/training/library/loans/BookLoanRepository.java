@@ -8,5 +8,7 @@ public interface BookLoanRepository extends JpaRepository<BookLoanEntity, Long> 
 
   long countByBookIdAndReturnedAtIsNull(Long bookId);
 
+  long countByBookIdAndUserId(Long bookId, Long userId);
+
   Page<BookLoanEntity> findAllByUserId(Long userId, Pageable pageable);
 }

@@ -108,13 +108,14 @@ Invalidate the current user's session.
 
 ### 1. List Books
 
-Retrieve a paginated list of books.
+Retrieve a paginated list of books, optionally filtered by title.
 
 - **Method**: `GET`
 - **Path**: `/api/v1/books`
 - **Query Parameters**:
   - `page` (optional, default: 1): The page number to retrieve.
   - `limit` (optional, default: 10): Items per page (max 50).
+  - `title` (optional): Case-insensitive substring filter on book title.
 - **Response** `200 OK`:
 
 ```json
@@ -359,6 +360,141 @@ Return a currently borrowed book. Requires `MEMBER` role.
   }
 }
 ```
+
+---
+
+## Reviews APIs (`/api/v1/reviews`)
+
+Members can post one review per book they've borrowed. Reviews are scoped to a book; the `bookId` query parameter is required on list and aggregate endpoints. All endpoints require a bearer token.
+
+### 1. List Reviews for a Book
+
+- **Method**: `GET`
+- **Path**: `/api/v1/reviews?bookId={bookId}`
+- **Query Parameters**:
+  - `bookId` (required): The book to list reviews for.
+  - `page` (optional, default: 1)
+  - `limit` (optional, default: 10, max: 50)
+- **Response** `200 OK`:
+
+```json
+{
+  "reviews": [
+    {
+      "id": 7,
+      "book_id": 1,
+      "user_id": 42,
+      "rating": 5,
+      "comment": "Great read",
+      "created_at": "2026-05-19T10:00:00Z",
+      "updated_at": "2026-05-19T10:00:00Z"
+    }
+  ],
+  "meta": { "total": 1, "next_page": null, "prev_page": null }
+}
+```
+
+### 2. Aggregate Rating for a Book
+
+- **Method**: `GET`
+- **Path**: `/api/v1/reviews/aggregate?bookId={bookId}`
+- **Response** `200 OK`:
+
+```json
+{
+  "aggregate": {
+    "book_id": 1,
+    "average_rating": 4.6,
+    "total_reviews": 12
+  }
+}
+```
+
+Backed by a Spring Data JPA **native query** that computes `AVG(rating)` and `COUNT(*)` server-side.
+
+### 3. Create Review
+
+Requires `MEMBER` role. The member must have at least one historical loan record for the book and may not have already reviewed it.
+
+- **Method**: `POST`
+- **Path**: `/api/v1/reviews`
+- **Headers**: `Authorization: Bearer <token>`
+- **Request Body**:
+
+```json
+{
+  "review": {
+    "bookId": 1,
+    "rating": 5,
+    "comment": "Great read"
+  }
+}
+```
+
+- **Response** `201 Created`: review envelope (same shape as list items).
+- **Errors**: `403 Forbidden` if the user never borrowed the book; `409 Conflict` if the user already reviewed it.
+
+### 4. Patch Review
+
+Owner-only. Updates `rating` and/or `comment`.
+
+- **Method**: `PATCH`
+- **Path**: `/api/v1/reviews/{reviewId}`
+- **Response** `200 OK`: review envelope.
+
+### 5. Delete Review
+
+Owner or `STAFF`. Soft-deletes.
+
+- **Method**: `DELETE`
+- **Path**: `/api/v1/reviews/{reviewId}`
+- **Response** `204 No Content`
+
+---
+
+## Library Stats API (`/api/v1/stats`)
+
+Aggregate counts and top-borrowed books for the dashboard. Requires `STAFF` role.
+
+- **Method**: `GET`
+- **Path**: `/api/v1/stats?top={n}`
+- **Query Parameters**:
+  - `top` (optional, default: 5, max: 50): How many "most-borrowed" books to return.
+- **Response** `200 OK`:
+
+```json
+{
+  "total_books": 42,
+  "total_members": 17,
+  "total_active_loans": 3,
+  "top_borrowed": [
+    { "id": 1, "title": "Spring Boot in Action", "borrowCount": 9 }
+  ]
+}
+```
+
+Implemented as a hand-written `@Repository` (`LibraryStatsRepository`) over `JdbcTemplate` with raw SQL aggregates. Each query is wrapped in a Micrometer `Timer` when a `MeterRegistry` bean is present (optional `@Autowired(required = false)` setter injection).
+
+---
+
+## Observability
+
+### Request correlation (`X-Request-Id`)
+
+Every request through `/api/**` is correlated by an `X-Request-Id` value:
+
+- If the client sends an `X-Request-Id` header, the server reuses it.
+- Otherwise, the server generates a UUID.
+- The value is echoed back on the response in the same header, and is added to the SLF4J `MDC` under the key `requestId` so that every log line emitted while handling the request carries `[<request-id>]` in its level segment.
+- See `RequestIdInterceptor` (a Spring MVC `HandlerInterceptor`) and `WebConfig`.
+
+### Actuator endpoints
+
+- `GET /actuator/health` — liveness/readiness; always accessible.
+- `GET /actuator/info` — build info; always accessible.
+- `GET /actuator/metrics` — Micrometer metrics; requires auth.
+
+Configured via `management.endpoints.web.exposure.include=health,info,metrics`.
 
 ---
 

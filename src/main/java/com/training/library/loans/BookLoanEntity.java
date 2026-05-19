@@ -13,6 +13,13 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
@@ -20,6 +27,13 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "book_loans")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@ToString(exclude = {"book", "user"})
+@EqualsAndHashCode(of = "id")
 @SQLDelete(sql = "UPDATE book_loans SET deleted_at = NOW() WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
 public class BookLoanEntity {
@@ -55,54 +69,4 @@ public class BookLoanEntity {
 
   @Column(name = "deleted_at")
   private Instant deletedAt;
-
-  public BookLoanEntity() {}
-
-  public Long getId() {
-    return id;
-  }
-
-  public BookEntity getBook() {
-    return book;
-  }
-
-  public UserEntity getUser() {
-    return user;
-  }
-
-  public Instant getBorrowedAt() {
-    return borrowedAt;
-  }
-
-  public Instant getReturnedAt() {
-    return returnedAt;
-  }
-
-  public Instant getCreatedAt() {
-    return createdAt;
-  }
-
-  public Instant getUpdatedAt() {
-    return updatedAt;
-  }
-
-  public Instant getDeletedAt() {
-    return deletedAt;
-  }
-
-  public void setBook(BookEntity book) {
-    this.book = book;
-  }
-
-  public void setUser(UserEntity user) {
-    this.user = user;
-  }
-
-  public void setBorrowedAt(Instant borrowedAt) {
-    this.borrowedAt = borrowedAt;
-  }
-
-  public void setReturnedAt(Instant returnedAt) {
-    this.returnedAt = returnedAt;
-  }
 }

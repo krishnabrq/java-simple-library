@@ -23,6 +23,21 @@ public interface BookRepository extends JpaRepository<BookEntity, Long> {
   Page<BookView> findAllWithAvailability(Pageable pageable);
 
   @Query(
+      value =
+          """
+          SELECT new com.training.library.books.BookView(b, COUNT(l))
+          FROM BookEntity b
+          LEFT JOIN BookLoanEntity l
+            ON l.book = b AND l.returnedAt IS NULL AND l.deletedAt IS NULL
+          WHERE LOWER(b.title) LIKE :titlePattern
+          GROUP BY b
+          ORDER BY b.id
+          """,
+      countQuery = "SELECT COUNT(b) FROM BookEntity b WHERE LOWER(b.title) LIKE :titlePattern")
+  Page<BookView> findByTitleWithAvailability(
+      @Param("titlePattern") String titlePattern, Pageable pageable);
+
+  @Query(
       """
       SELECT new com.training.library.books.BookView(b, COUNT(l))
       FROM BookEntity b

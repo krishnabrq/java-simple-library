@@ -1,0 +1,76 @@
+databaseChangeLog:
+  - changeSet:
+      id: 5-reviews-table
+      author: system
+      changes:
+        - createTable:
+            tableName: reviews
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: book_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: rating
+                  type: smallint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: comment
+                  type: varchar(2000)
+              - column:
+                  name: created_at
+                  type: timestamp(6) with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp(6) with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: deleted_at
+                  type: timestamp(6) with time zone
+        - addForeignKeyConstraint:
+            baseTableName: reviews
+            baseColumnNames: book_id
+            constraintName: fk_reviews_book_id
+            referencedTableName: books
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: reviews
+            baseColumnNames: user_id
+            constraintName: fk_reviews_user_id
+            referencedTableName: users
+            referencedColumnNames: id
+        - sql:
+            sql: |
+              ALTER TABLE reviews
+                  ADD CONSTRAINT reviews_rating_range CHECK (rating BETWEEN 1 AND 5);
+
+  - changeSet:
+      id: 6-reviews-unique-active-per-user-book
+      author: system
+      changes:
+        - sql:
+            sql: |
+              CREATE UNIQUE INDEX IF NOT EXISTS reviews_book_user_active_uidx
+                  ON reviews (book_id, user_id)
+                  WHERE deleted_at IS NULL;
+      rollback:
+        - sql:
+            sql: |
+              DROP INDEX IF EXISTS reviews_book_user_active_uidx;

@@ -8,6 +8,9 @@ import com.training.library.books.BookNotFoundException;
 import com.training.library.loans.LoanConflictException;
 import com.training.library.loans.LoanNotFoundException;
 import com.training.library.loans.LoanNotPermittedException;
+import com.training.library.reviews.ReviewConflictException;
+import com.training.library.reviews.ReviewNotFoundException;
+import com.training.library.reviews.ReviewNotPermittedException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,6 +72,26 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(LoanNotPermittedException.class)
   public ResponseEntity<ErrorResponse> handleLoanForbidden(LoanNotPermittedException ex) {
     log.debug("403 loan not permitted: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        .body(ErrorResponse.of(403, "Forbidden", ex.getMessage()));
+  }
+
+  @ExceptionHandler(ReviewNotFoundException.class)
+  public ResponseEntity<ErrorResponse> handleReviewNotFound(ReviewNotFoundException ex) {
+    log.debug("404 review not found: {}", ex.getMessage());
+    return notFound(ex.getMessage());
+  }
+
+  @ExceptionHandler(ReviewConflictException.class)
+  public ResponseEntity<ErrorResponse> handleReviewConflict(ReviewConflictException ex) {
+    log.debug("409 review conflict: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ErrorResponse.of(409, "Conflict", ex.getMessage()));
+  }
+
+  @ExceptionHandler(ReviewNotPermittedException.class)
+  public ResponseEntity<ErrorResponse> handleReviewForbidden(ReviewNotPermittedException ex) {
+    log.debug("403 review not permitted: {}", ex.getMessage());
     return ResponseEntity.status(HttpStatus.FORBIDDEN)
         .body(ErrorResponse.of(403, "Forbidden", ex.getMessage()));
   }

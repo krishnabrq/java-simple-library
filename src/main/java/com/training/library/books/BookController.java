@@ -33,8 +33,10 @@ public class BookController {
   @GetMapping
   public BookDto.ListEnvelope list(
       @RequestParam(defaultValue = "1") @Min(1) Integer page,
-      @RequestParam(defaultValue = "10") @Min(10) @Max(50) Integer limit) {
-    Page<BookView> result = service.findAll(page, limit);
+      @RequestParam(defaultValue = "10") @Min(10) @Max(50) Integer limit,
+      @RequestParam(required = false) String title) {
+    BookSearchCriteria criteria = new BookSearchCriteria(title, page, limit);
+    Page<BookView> result = service.search(criteria);
     Integer nextPage = result.hasNext() ? page + 1 : null;
     Integer prevPage = page > 1 ? page - 1 : null;
     BookDto.Meta meta = new BookDto.Meta(result.getTotalElements(), nextPage, prevPage);

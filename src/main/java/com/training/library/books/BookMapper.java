@@ -31,6 +31,7 @@ public interface BookMapper {
   @Mapping(target = "createdAt", ignore = true)
   @Mapping(target = "updatedAt", ignore = true)
   @Mapping(target = "deletedAt", ignore = true)
+  @Mapping(target = "reviews", ignore = true)
   BookEntity toEntity(BookDto.WriteRequest request);
 
   @Mapping(target = "id", ignore = true)
@@ -38,6 +39,7 @@ public interface BookMapper {
   @Mapping(target = "createdAt", ignore = true)
   @Mapping(target = "updatedAt", ignore = true)
   @Mapping(target = "deletedAt", ignore = true)
+  @Mapping(target = "reviews", ignore = true)
   void updateFromUpdateRequest(@MappingTarget BookEntity entity, BookDto.UpdateRequest request);
 
   @Mapping(target = "id", ignore = true)
@@ -45,6 +47,7 @@ public interface BookMapper {
   @Mapping(target = "createdAt", ignore = true)
   @Mapping(target = "updatedAt", ignore = true)
   @Mapping(target = "deletedAt", ignore = true)
+  @Mapping(target = "reviews", ignore = true)
   @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
   void updatePatch(@MappingTarget BookEntity entity, BookDto.PatchRequest patch);
 }

@@ -2,3 +2,6 @@ databaseChangeLog:
   - include:
       file: changesets/20260101000000-init-schema.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changesets/20260520000000-reviews-table.yaml
+      relativeToChangelogFile: true

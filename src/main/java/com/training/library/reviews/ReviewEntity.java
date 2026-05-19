@@ -1,15 +1,18 @@
-package com.training.library.users;
+package com.training.library.reviews;
 
+import com.training.library.books.BookEntity;
+import com.training.library.users.UserEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -26,42 +29,41 @@ import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
-@Table(name = "users")
+@Table(name = "reviews")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@ToString(exclude = "passwordHash")
+@ToString(exclude = {"book", "user"})
 @EqualsAndHashCode(of = "id")
-@SQLDelete(sql = "UPDATE users SET deleted_at = NOW() WHERE id = ?")
+@SQLDelete(sql = "UPDATE reviews SET deleted_at = NOW() WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
-public class UserEntity {
+public class ReviewEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @NotBlank
-  @Size(min = 1, max = 255)
-  @Column(nullable = false, length = 255)
-  private String name;
-
-  @NotBlank
-  @Email
-  @Size(max = 255)
-  @Column(nullable = false, length = 255)
-  private String email;
-
-  @NotBlank
-  @Size(min = 1, max = 255)
-  @Column(name = "password_hash", nullable = false, length = 255)
-  private String passwordHash;
+  @NotNull
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "book_id", nullable = false)
+  private BookEntity book;
 
   @NotNull
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 16)
-  private UserRole role;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "user_id", nullable = false)
+  private UserEntity user;
+
+  @NotNull
+  @Min(1)
+  @Max(5)
+  @Column(nullable = false)
+  private Short rating;
+
+  @Size(max = 2000)
+  @Column(length = 2000)
+  private String comment;
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
