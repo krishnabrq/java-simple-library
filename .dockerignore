@@ -1,0 +1,49 @@
+# Build outputs
+build/
+out/
+bin/
+.gradle/
+
+# IDE & OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# Secrets & local config (never bake into the image)
+.env
+.env.*
+!.env.example
+
+# Tests, reports, coverage
+**/build/
+**/.gradle/
+**/test-results/
+**/jacoco/
+coverage/
+
+# Docs (not needed in the image)
+*.md
+KNOWLEDGE.md
+README.md
+SESSIONS.md
+PROGRESS.md
+JOURNEY.md
+sheet*.csv
+
+# CI / Tooling
+.github/
+.editorconfig
+Makefile
+
+# Misc local artifacts
+*.log
+logs/
+tmp/
+liquibase-diff-output.yaml

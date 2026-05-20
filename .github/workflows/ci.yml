@@ -1,0 +1,213 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    name: Format (Spotless)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Spotless check
+        run: ./gradlew spotlessCheck --no-daemon
+
+  checkstyle:
+    name: Checkstyle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Checkstyle (main + test)
+        run: ./gradlew checkstyleMain checkstyleTest -Pci --no-daemon
+      - name: Upload Checkstyle reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: checkstyle-reports
+          path: build/reports/checkstyle/
+          if-no-files-found: ignore
+
+  pmd:
+    name: PMD
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: PMD (main + test)
+        run: ./gradlew pmdMain pmdTest -Pci --no-daemon
+      - name: Upload PMD reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pmd-reports
+          path: build/reports/pmd/
+          if-no-files-found: ignore
+
+  test:
+    name: Test (JUnit + JaCoCo)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: library_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: library_test
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: ci-test-secret-please-be-at-least-32-bytes-long
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Run tests
+        run: ./gradlew test jacocoTestReport --no-daemon
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            build/reports/tests/
+            build/test-results/
+          if-no-files-found: ignore
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-report
+          path: build/reports/jacoco/
+          if-no-files-found: ignore
+
+  build:
+    name: Build (bootJar)
+    runs-on: ubuntu-latest
+    needs: [format, checkstyle, pmd, test]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Assemble jar (skip tests, already run)
+        run: ./gradlew bootJar -x test --no-daemon
+      - name: Upload jar
+        uses: actions/upload-artifact@v7
+        with:
+          name: library-jar
+          path: build/libs/*.jar
+          if-no-files-found: error
+
+  docker:
+    name: Docker build + smoke test
+    runs-on: ubuntu-latest
+    needs: [build]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: library
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build image (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: library-app:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run container against Postgres
+        run: |
+          docker run -d --name library-smoke \
+            --network host \
+            -e DB_HOST=localhost \
+            -e DB_PORT=5432 \
+            -e DB_NAME=library \
+            -e DB_USER=postgres \
+            -e DB_PASSWORD=postgres \
+            -e JWT_SECRET=ci-smoke-secret-please-be-at-least-32-bytes-long \
+            -e DB_DDL_AUTO=validate \
+            library-app:ci-${{ github.sha }}
+      - name: Wait for /actuator/health to report UP
+        run: |
+          for i in $(seq 1 60); do
+            body=$(curl -fsS http://127.0.0.1:8080/actuator/health || true)
+            echo "attempt $i: $body"
+            if echo "$body" | grep -q '"status":"UP"'; then
+              echo "smoke test passed"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "smoke test failed — dumping container logs"
+          docker logs library-smoke
+          exit 1
+      - name: Dump container logs (always)
+        if: always()
+        run: docker logs library-smoke || true
+      - name: Stop container
+        if: always()
+        run: docker rm -f library-smoke || true

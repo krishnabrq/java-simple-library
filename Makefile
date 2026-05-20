@@ -1,7 +1,10 @@
 .PHONY: help build run test clean compile watch deps format format-check \
+	checkstyle pmd quality ci-verify \
 	db-update db-status db-history db-validate db-rollback-count db-rollback-tag \
 	db-tag db-clear-checksums db-changelog-sync db-drop-all db-diff \
-	db-generate-migration
+	db-generate-migration \
+	docker-build docker-run docker-up docker-down docker-restart \
+	docker-logs docker-ps docker-shell docker-clean
 
 # Auto-load .env if present so every target (including liquibase) inherits the
 # same DB_* / JWT_SECRET / LOG_* values Spring reads at runtime. Make's `include`
@@ -38,6 +41,26 @@ format: ## Apply Spotless / google-java-format
 
 format-check: ## Verify formatting without changing files
 	./gradlew spotlessCheck
+
+# ----------------------------------------------------------------------------
+# Code quality — Checkstyle, PMD, SonarQube.
+#
+# These tasks are GATED by the `-Pci` Gradle property. Day-to-day `make build`
+# does NOT run them so the local loop stays fast. CI passes `-Pci` to enable
+# them. You can opt in locally with the targets below.
+# ----------------------------------------------------------------------------
+
+checkstyle: ## Run Checkstyle on main + test sources (locally opts into -Pci)
+	./gradlew checkstyleMain checkstyleTest -Pci
+
+pmd: ## Run PMD on main + test sources (locally opts into -Pci)
+	./gradlew pmdMain pmdTest -Pci
+
+quality: ## Run Spotless + Checkstyle + PMD locally (same set CI enforces)
+	./gradlew spotlessCheck checkstyleMain checkstyleTest pmdMain pmdTest -Pci
+
+ci-verify: ## Full CI gauntlet: format, lint, test, build (no Docker, no push)
+	./gradlew spotlessCheck checkstyleMain checkstyleTest pmdMain pmdTest test build -Pci
 
 # ----------------------------------------------------------------------------
 # Liquibase — schema migrations.
@@ -100,3 +123,45 @@ db-generate-migration: ## Generate YAML changeset from JPA-vs-DB diff (usage: ma
 	echo "    1. Open the file and review/edit the changes" && \
 	echo "    2. Add an 'include:' entry for it in db.changelog-master.yaml" && \
 	echo "    3. Run 'make db-update' to apply"
+
+# ----------------------------------------------------------------------------
+# Docker — containerized build and run.
+#
+# Two flavors:
+#   1. `docker-build` / `docker-run` — build and run the app image standalone
+#      (you must point DB_HOST at a Postgres reachable from inside the container).
+#   2. `docker-up` — bring up the full stack (Postgres + app) via docker compose
+#      using values from .env. This is the easiest way to run the app locally.
+# ----------------------------------------------------------------------------
+
+docker-build: ## Build the app Docker image (multi-stage, layered)
+	docker build -t library-app:latest .
+
+docker-run: ## Run the app container standalone on :8080 (needs an external Postgres)
+	docker run --rm -it \
+		--name library-app \
+		-p 8080:8080 \
+		--env-file .env \
+		library-app:latest
+
+docker-up: ## Start the full stack (Postgres + app) via docker compose
+	docker compose up -d --build
+
+docker-down: ## Stop the docker compose stack (keeps the Postgres volume)
+	docker compose down
+
+docker-restart: ## Restart only the app container (faster than full rebuild)
+	docker compose restart app
+
+docker-logs: ## Tail logs from the app container
+	docker compose logs -f app
+
+docker-ps: ## Show running containers in the compose stack
+	docker compose ps
+
+docker-shell: ## Open a shell inside the running app container
+	docker compose exec app sh
+
+docker-clean: ## DESTRUCTIVE — remove containers, image, and the Postgres volume
+	docker compose down -v
+	-docker rmi library-app:latest
