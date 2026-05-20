@@ -15,5 +15,5 @@ public interface LoanMapper {
   @Mapping(target = "book.name", source = "book.title")
   LoanDto.ListResponse toListResponse(BookLoanEntity loan);
 
-  List<LoanDto.ListResponse> toListResponses(java.util.List<BookLoanEntity> loans);
+  List<LoanDto.ListResponse> toListResponses(List<BookLoanEntity> loans);
 }

@@ -1,5 +1,6 @@
 package com.training.library.books;
 
+import java.util.Locale;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,6 +19,6 @@ public class BookSearchCriteria {
   }
 
   public String normalizedTitleFilter() {
-    return hasTitleFilter() ? "%" + titleContains.trim().toLowerCase() + "%" : null;
+    return hasTitleFilter() ? "%" + titleContains.trim().toLowerCase(Locale.ROOT) + "%" : null;
   }
 }

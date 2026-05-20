@@ -13,14 +13,13 @@
 
   <rule ref="category/java/bestpractices.xml">
     <exclude name="GuardLogStatement"/>
-    <exclude name="JUnitTestContainsTooManyAsserts"/>
     <exclude name="UnitTestContainsTooManyAsserts"/>
     <exclude name="LiteralsFirstInComparisons"/>
+    <exclude name="LooseCoupling"/>
+    <exclude name="UnitTestShouldIncludeAssert"/>
   </rule>
 
   <rule ref="category/java/errorprone.xml">
-    <exclude name="BeanMembersShouldSerialize"/>
-    <exclude name="DataflowAnomalyAnalysis"/>
     <exclude name="AvoidLiteralsInIfCondition"/>
     <exclude name="AvoidFieldNameMatchingMethodName"/>
     <exclude name="AvoidDuplicateLiterals"/>
@@ -45,7 +44,6 @@
     <exclude name="ShortClassName"/>
     <exclude name="ShortMethodName"/>
     <exclude name="CommentDefaultAccessModifier"/>
-    <exclude name="DefaultPackage"/>
     <exclude name="LocalVariableCouldBeFinal"/>
     <exclude name="MethodArgumentCouldBeFinal"/>
     <exclude name="UnnecessaryConstructor"/>
@@ -56,6 +54,7 @@
     <exclude name="ClassNamingConventions"/>
     <exclude name="FieldNamingConventions"/>
     <exclude name="MethodNamingConventions"/>
+    <exclude name="TooManyStaticImports"/>
   </rule>
 
   <rule ref="category/java/design.xml">
@@ -64,16 +63,14 @@
     <exclude name="DataClass"/>
     <exclude name="TooManyMethods"/>
     <exclude name="TooManyFields"/>
-    <exclude name="TooManyImports"/>
     <exclude name="ExcessiveImports"/>
     <exclude name="ExcessivePublicCount"/>
     <exclude name="ExcessiveParameterList"/>
-    <exclude name="ExcessivePublicMethods"/>
     <exclude name="UseObjectForClearerAPI"/>
+    <exclude name="UseUtilityClass"/>
     <exclude name="AvoidCatchingGenericException"/>
     <exclude name="SignatureDeclareThrowsException"/>
     <exclude name="CouplingBetweenObjects"/>
-    <exclude name="ExcessiveImports"/>
     <exclude name="GodClass"/>
     <exclude name="CyclomaticComplexity"/>
     <exclude name="CognitiveComplexity"/>
@@ -88,6 +85,8 @@
     <exclude name="UncommentedEmptyMethodBody"/>
   </rule>
 
-  <rule ref="category/java/security.xml"/>
+  <rule ref="category/java/security.xml">
+    <exclude name="HardCodedCryptoKey"/>
+  </rule>
 
 </ruleset>

@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 @FeignClient(name = "welcomeNotifier", url = "${app.welcome-notifier.base-url}")
+@SuppressWarnings("PMD.ImplicitFunctionalInterface")
 public interface WelcomeNotifierClient {
 
   @PostMapping("/posts")

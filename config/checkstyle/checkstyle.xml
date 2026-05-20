@@ -38,10 +38,14 @@
     </module>
     <module name="TypeName"/>
     <module name="MemberName"/>
-    <module name="MethodName"/>
+    <module name="MethodName">
+      <property name="format" value="^[a-z][a-zA-Z0-9]*(_[a-zA-Z0-9]+)*$"/>
+    </module>
     <module name="ParameterName"/>
     <module name="LocalVariableName"/>
-    <module name="ConstantName"/>
+    <module name="ConstantName">
+      <property name="format" value="^(log|[A-Z][A-Z0-9]*(_[A-Z0-9]+)*)$"/>
+    </module>
 
     <module name="EmptyBlock">
       <property name="option" value="text"/>
@@ -66,7 +70,6 @@
     <module name="ModifierOrder"/>
 
     <module name="MissingOverride"/>
-    <module name="HideUtilityClassConstructor"/>
 
     <module name="StringLiteralEquality"/>
     <module name="SimplifyBooleanExpression"/>

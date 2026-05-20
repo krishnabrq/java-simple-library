@@ -75,7 +75,7 @@ public class AuthService {
     try {
       jwt = jwtDecoder.decode(refreshToken);
     } catch (JwtException e) {
-      throw new InvalidTokenException("Refresh token is invalid or expired");
+      throw new InvalidTokenException("Refresh token is invalid or expired", e);
     }
     if (!JwtService.TYPE_REFRESH.equals(jwt.getClaimAsString(JwtService.CLAIM_TYPE))) {
       throw new InvalidTokenException("Not a refresh token");
@@ -85,7 +85,7 @@ public class AuthService {
     try {
       userId = Long.valueOf(jwt.getSubject());
     } catch (NumberFormatException e) {
-      throw new InvalidTokenException("Refresh token subject is malformed");
+      throw new InvalidTokenException("Refresh token subject is malformed", e);
     }
     UserEntity user =
         userRepository
