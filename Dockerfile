@@ -10,15 +10,10 @@ RUN chmod +x gradlew && ./gradlew --version
 
 COPY src src
 RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew clean bootJar -x test --no-daemon
+    ./gradlew clean bootJar -x test --no-daemon \
+ && cp build/libs/$(ls build/libs | grep -v plain | head -n1) app.jar
 
-# ----- Stage 2: explode the layered jar so Docker can cache by layer -----
-FROM eclipse-temurin:25-jre-noble AS extractor
-WORKDIR /extract
-COPY --from=builder /workspace/build/libs/*.jar app.jar
-RUN java -Djarmode=tools -jar app.jar extract --layers --destination extracted
-
-# ----- Stage 3: minimal runtime image -----
+# ----- Stage 2: minimal runtime image -----
 FROM eclipse-temurin:25-jre-noble
 WORKDIR /app
 
@@ -28,10 +23,7 @@ RUN apt-get update \
  && groupadd --system --gid 1001 library \
  && useradd  --system --uid 1001 --gid library --home /app --shell /usr/sbin/nologin library
 
-COPY --from=extractor --chown=library:library /extract/extracted/dependencies/         ./
-COPY --from=extractor --chown=library:library /extract/extracted/spring-boot-loader/   ./
-COPY --from=extractor --chown=library:library /extract/extracted/snapshot-dependencies/ ./
-COPY --from=extractor --chown=library:library /extract/extracted/application/          ./
+COPY --from=builder --chown=library:library /workspace/app.jar /app/app.jar
 
 USER library
 
@@ -43,4 +35,4 @@ ENV JAVA_OPTS="" \
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8080/actuator/health | grep -q '"status":"UP"' || exit 1
 
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher \"$@\"", "--"]
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar \"$@\"", "--"]
